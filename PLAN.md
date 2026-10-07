@@ -238,7 +238,7 @@ with the grounding check; eval runner reports grounding rate and parse accuracy.
 wall time per 10k-run scenario, cache hit rate under a replayed access log, p99 API latency (cold vs
 cached), backtest metrics on 24 races, grounding rate, parse accuracy.
 
-### M3 — Title Odds + Polymarket  🔨 (season Monte Carlo + odds API done; Polymarket ingestion/scoring in progress)
+### M3 — Title Odds + Polymarket  🔨 (season Monte Carlo, odds API + page, Polymarket ingestion and Brier scoring done and measured; open: hourly price refresh job, per-session forecast automation, vs-market panel on the page)
 Done means: forecast job runs after each 2026 session and stores results; Polymarket prices ingested
 hourly; `/odds` page charts our odds vs market over time; Brier score vs Polymarket over N races
 (backtest + live). Metrics: Brier (ours vs market), N races scored.
