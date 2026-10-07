@@ -351,7 +351,9 @@ def store_forecast(fc: SeasonForecast, client=None) -> int:
                 MODEL_VERSION,
             ]
         )
-    as_of = pd.Timestamp(fc.as_of).to_pydatetime().replace(tzinfo=None)
+    # fc.as_of is UTC; make it tz-aware so clickhouse-connect does not re-interpret it as local time
+    ts = pd.Timestamp(fc.as_of)
+    as_of = (ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")).to_pydatetime()
     for r in rows:
         r[1] = as_of
     client.insert(

@@ -249,5 +249,5 @@ CREATE TABLE IF NOT EXISTS forecasts (
     n_sims          UInt32,
     model_version   LowCardinality(String)
 ) ENGINE = ReplacingMergeTree
-ORDER BY (season, kind, as_of, round, driver)
+ORDER BY (season, kind, as_of, round, driver, team)
 SETTINGS allow_nullable_key = 1;
