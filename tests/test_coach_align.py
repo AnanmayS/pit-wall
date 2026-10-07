@@ -58,9 +58,10 @@ def corner_lap(
     spacing_m: float = 2.0,
 ) -> pd.DataFrame:
     """A lap with one corner: brake at brake_point_m, apex at corner_m, full throttle again
-    at throttle_on_m. Time is integrated from the speed profile, so it is self-consistent."""
+    at throttle_on_m and back to top speed 140 m later. Time is integrated from the speed
+    profile, so it is self-consistent."""
     d = np.arange(0.0, length_m + spacing_m / 2, spacing_m)
-    exit_end = corner_m + 200.0
+    exit_end = throttle_on_m + 140.0
     speed = np.interp(
         d,
         [0.0, brake_point_m, corner_m, exit_end, length_m],
@@ -71,7 +72,8 @@ def corner_lap(
     session_ms = 100_000 + np.concatenate([[0.0], np.cumsum(dt_s)]) * 1000.0
     brake = (d >= brake_point_m) & (d < corner_m - 10.0)
     throttle = np.where(d < brake_point_m, 100.0, 0.0)
-    throttle = np.where(d >= corner_m, np.interp(d, [corner_m, throttle_on_m], [20.0, 100.0]), throttle)
+    exit_ramp = np.interp(d, [corner_m, throttle_on_m], [20.0, 80.0])
+    throttle = np.where(d >= corner_m, np.where(d >= throttle_on_m, 100.0, exit_ramp), throttle)
     gear = np.where(brake | ((d >= corner_m) & (d < throttle_on_m)), 3, 8)
     return pd.DataFrame(
         {
@@ -104,7 +106,9 @@ def test_constant_speed_delta_is_analytic():
     expected = d["distance_m"] / (200 / 3.6) * 1000 - d["distance_m"] / (210 / 3.6) * 1000
     np.testing.assert_allclose(d["delta_ms"], expected, atol=1e-6)
     # A is slower everywhere, so the delta is positive and growing.
-    assert d["delta_ms"].iloc[-1] == pytest.approx(1000 / (200 / 3.6) * 1000 - 1000 / (210 / 3.6) * 1000)
+    assert d["delta_ms"].iloc[-1] == pytest.approx(
+        1000 / (200 / 3.6) * 1000 - 1000 / (210 / 3.6) * 1000
+    )
     assert (np.diff(d["delta_ms"]) >= 0).all()
 
 
@@ -200,7 +204,9 @@ def test_segment_names_and_letters():
 
 
 def test_corner_metrics_brake_apex_throttle():
-    grid = resample_to_distance(corner_lap(brake_point_m=700.0, apex_kph=100.0, throttle_on_m=860.0))
+    grid = resample_to_distance(
+        corner_lap(brake_point_m=700.0, apex_kph=100.0, throttle_on_m=860.0)
+    )
     m = corner_metrics(grid, 800.0, segment_start_m=0.0, segment_end_m=1500.0)
     assert m.brake_point_m == 700.0
     assert m.min_speed_kph == pytest.approx(100.0)
@@ -261,7 +267,9 @@ def test_build_comparison_brake_later_insight():
 
     assert result.total_delta_ms < 0  # A is faster
     assert result.total_delta_ms == result.telemetry_delta_ms  # no official lap times given
-    assert sum(s.delta_ms for s in result.segments) == pytest.approx(result.telemetry_delta_ms, abs=0.2)
+    assert sum(s.delta_ms for s in result.segments) == pytest.approx(
+        result.telemetry_delta_ms, abs=0.2
+    )
     corner = result.corners[0]
     assert corner.brake_delta_m == pytest.approx(8.0)
     assert corner.apex_speed_a_kph - corner.apex_speed_b_kph == pytest.approx(4.0)
@@ -279,13 +287,16 @@ def test_build_comparison_brake_later_insight():
 def test_build_comparison_traction_insight_for_driver_b():
     tel_a = corner_lap(brake_point_m=700.0, apex_kph=100.0, throttle_on_m=880.0)
     tel_b = corner_lap(brake_point_m=700.0, apex_kph=100.0, throttle_on_m=860.0)
-    # B also accelerates harder on exit, otherwise earlier throttle would not gain time.
-    tel_b = tel_b.copy()
-    tel_a = tel_a.copy()
     result = _compare(tel_a, tel_b, CORNERS, lap_time_a_ms=90_123, lap_time_b_ms=90_000)
-    assert result.total_delta_ms == 123.0
-    assert result.corners[0].throttle_on_b_m < result.corners[0].throttle_on_a_m
+
+    assert result.total_delta_ms == 123.0  # official lap times win over the telemetry delta
+    assert result.telemetry_delta_ms > 0
     assert "1:30.123" in result.summary
+    insight = result.insights[0]
+    assert insight.faster_driver == "BBB"
+    assert insight.kind == "traction"
+    assert insight.delta_ms > 0  # sign stays "time lost by A"
+    assert insight.text.startswith("BBB gets back on full throttle 20 m earlier than AAA out of T1")
 
 
 def test_build_comparison_grid_is_downsampled_and_consistent():

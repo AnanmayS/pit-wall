@@ -174,7 +174,7 @@ def build_comparison(
     )
     return CompareResult(
         meta=meta,
-        total_delta_ms=total_delta_ms,
+        total_delta_ms=round_to(total_delta_ms, 1),
         telemetry_delta_ms=round_to(telemetry_delta_ms, 1),
         summary=lap_summary(meta, total_delta_ms),
         grid=_transport_grid(grid_a, grid_b, delta),

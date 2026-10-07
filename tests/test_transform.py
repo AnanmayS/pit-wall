@@ -10,10 +10,13 @@ import pandas as pd
 import pytest
 
 from pitwall.db.clickhouse import DDL_PATH, iter_statements
-from pitwall.ingest import transform as T
+from pitwall.ingest import transform as tf
 from pitwall.ingest.source import sessions_from_schedule
 
-TD = pd.Timedelta
+
+def TD(seconds: float = 0.0, milliseconds: float = 0.0) -> pd.Timedelta:  # noqa: N802
+    """pd.Timedelta built from an explicit unit (keyword construction warns on numpy 2)."""
+    return pd.Timedelta(seconds * 1000.0 + milliseconds, unit="ms")
 
 
 def ddl_columns() -> dict[str, list[str]]:
@@ -75,7 +78,9 @@ def make_laps() -> pd.DataFrame:
     for c in ("SpeedI1", "SpeedI2", "SpeedFL", "SpeedST"):
         df[c] = 300.0
     df.loc[1, "SpeedFL"] = np.nan
-    df["IsPersonalBest"] = pd.Series([True, False, np.nan, False, False, True, False, False], dtype=object)
+    df["IsPersonalBest"] = pd.Series(
+        [True, False, np.nan, False, False, True, False, False], dtype=object
+    )
     df["FreshTyre"] = True
     df["TrackStatus"] = "1"
     df["Position"] = np.where(df["Driver"] == "VER", 1.0, 2.0)
@@ -112,13 +117,13 @@ def make_raw_telemetry(n: int = 6) -> pd.DataFrame:
 
 def test_schemas_match_ddl_columns_exactly():
     ddl = ddl_columns()
-    assert set(ddl) - {"ingest_runs"} == set(T.SCHEMAS)
-    for table, cols in T.SCHEMAS.items():
+    assert set(ddl) - {"ingest_runs"} == set(tf.SCHEMAS)
+    for table, cols in tf.SCHEMAS.items():
         assert list(cols) == ddl[table], table
 
 
 def test_telemetry_columns_equal_ddl():
-    df = T.normalize_telemetry(make_raw_telemetry(), 2025, 1, "R")
+    df = tf.normalize_telemetry(make_raw_telemetry(), 2025, 1, "R")
     assert list(df.columns) == ddl_columns()["telemetry"]
     assert str(df["session_ms"].dtype) == "uint32"
     assert str(df["rpm"].dtype) == "uint16"
@@ -130,15 +135,15 @@ def test_telemetry_columns_equal_ddl():
 
 def test_empty_frames_have_ddl_columns():
     ddl = ddl_columns()
-    for table in T.SCHEMAS:
-        assert list(T.empty_frame(table).columns) == ddl[table]
+    for table in tf.SCHEMAS:
+        assert list(tf.empty_frame(table).columns) == ddl[table]
 
 
 # --------------------------------------------------------------------------- conversions
 
 
 def test_timedelta_to_ms_with_nat():
-    s = T.timedelta_to_ms([TD(seconds=90.1234), pd.NaT, TD(milliseconds=1), TD(0)])
+    s = tf.timedelta_to_ms([TD(seconds=90.1234), pd.NaT, TD(milliseconds=1), TD(0)])
     assert s.dtype == "Int64"
     assert s.iloc[0] == 90_123
     assert s.iloc[1] is pd.NA
@@ -147,9 +152,9 @@ def test_timedelta_to_ms_with_nat():
 
 
 def test_ms_or_none():
-    assert T.ms_or_none(pd.NaT) is None
-    assert T.ms_or_none(None) is None
-    assert T.ms_or_none(TD(seconds=1.5)) == 1500
+    assert tf.ms_or_none(pd.NaT) is None
+    assert tf.ms_or_none(None) is None
+    assert tf.ms_or_none(TD(seconds=1.5)) == 1500
 
 
 def test_conform_clamps_and_nulls():
@@ -158,23 +163,23 @@ def test_conform_clamps_and_nulls():
             "season": [2025],
             "round": [1],
             "session_type": ["R"],
-            "session_ms": [T.timedelta_to_ms([TD(seconds=10)]).iloc[0]],
+            "session_ms": [tf.timedelta_to_ms([TD(seconds=10)]).iloc[0]],
             "status": ["4"],
             "message": [None],
         }
     )
-    out = T.conform(df, "track_status")
+    out = tf.conform(df, "track_status")
     assert out.loc[0, "status"] == 4
     assert out.loc[0, "message"] == ""
     with pytest.raises(KeyError):
-        T.conform(df.drop(columns="status"), "track_status")
+        tf.conform(df.drop(columns="status"), "track_status")
 
 
 # --------------------------------------------------------------------------- laps / stints / pits
 
 
 def test_laps_frame():
-    df = T.laps_frame(make_laps(), 2025, 1, "R")
+    df = tf.laps_frame(make_laps(), 2025, 1, "R")
     assert list(df.columns) == ddl_columns()["laps"]
     assert len(df) == 8
     ver1 = df.iloc[0]
@@ -192,8 +197,9 @@ def test_laps_frame():
 
 
 def test_stints_frame():
-    df = T.stints_frame(make_laps(), 2025, 1, "R").set_index(["driver", "stint"])
-    assert list(df.reset_index().columns) == ddl_columns()["stints"]
+    raw = tf.stints_frame(make_laps(), 2025, 1, "R")
+    assert list(raw.columns) == ddl_columns()["stints"]
+    df = raw.set_index(["driver", "stint"])
     assert len(df) == 3
     ver1, ver2, ham1 = df.loc[("VER", 1)], df.loc[("VER", 2)], df.loc[("HAM", 1)]
     assert (ver1["compound"], ver1["start_lap"], ver1["end_lap"], ver1["laps"]) == ("SOFT", 1, 2, 2)
@@ -205,7 +211,7 @@ def test_stints_frame():
 
 
 def test_pit_stops_frame():
-    df = T.pit_stops_frame(make_laps(), 2025, 1, "R")
+    df = tf.pit_stops_frame(make_laps(), 2025, 1, "R")
     assert list(df.columns) == ddl_columns()["pit_stops"]
     # HAM's pit entry on his final lap has no out-lap and is dropped
     assert len(df) == 1
@@ -224,7 +230,7 @@ def test_pit_stop_numbers_increment_per_driver():
     # add a second VER stop: in on lap 4, out on lap 5
     laps.loc[3, "PitInTime"] = TD(seconds=400)
     laps.loc[4, "PitOutTime"] = TD(seconds=420)
-    df = T.pit_stops_frame(laps, 2025, 1, "R")
+    df = tf.pit_stops_frame(laps, 2025, 1, "R")
     ver = df[df["driver"] == "VER"]
     assert ver["stop_number"].tolist() == [1, 2]
     assert ver["lap_in"].tolist() == [2, 4]
@@ -235,7 +241,7 @@ def test_pit_stop_numbers_increment_per_driver():
 def test_pit_stops_empty():
     laps = make_laps()
     laps["PitInTime"] = pd.NaT
-    df = T.pit_stops_frame(laps, 2025, 1, "R")
+    df = tf.pit_stops_frame(laps, 2025, 1, "R")
     assert df.empty
     assert list(df.columns) == ddl_columns()["pit_stops"]
 
@@ -249,7 +255,7 @@ def test_normalize_telemetry_drops_nan_rows_and_clamps():
     raw.loc[2, "SessionTime"] = pd.NaT
     raw.loc[3, "RPM"] = 70_000.0  # out of UInt16 range
     raw.loc[4, "nGear"] = -1
-    df = T.normalize_telemetry(raw, 2025, 1, "R")
+    df = tf.normalize_telemetry(raw, 2025, 1, "R")
     assert len(df) == 4
     assert df["rpm"].max() == 65_535
     assert df["gear"].min() == 0
@@ -260,7 +266,7 @@ def test_normalize_telemetry_drops_nan_rows_and_clamps():
 def test_normalize_telemetry_numeric_brake():
     raw = make_raw_telemetry()
     raw["Brake"] = [0, 100, 0, 100, 0, 100]  # pre-2023 FastF1 style
-    df = T.normalize_telemetry(raw, 2025, 1, "R")
+    df = tf.normalize_telemetry(raw, 2025, 1, "R")
     assert df["brake"].tolist() == [False, True] * 3
 
 
@@ -284,7 +290,7 @@ def test_results_frame_quali_times():
             "Q3": [TD(seconds=75.096), pd.NaT],
         }
     )
-    df = T.results_frame(results, 2025, 1, "Q")
+    df = tf.results_frame(results, 2025, 1, "Q")
     assert list(df.columns) == ddl_columns()["results"]
     assert df.loc[0, "q3_ms"] == 75_096
     assert df.loc[1, "q2_ms"] is pd.NA
@@ -307,7 +313,7 @@ def test_race_control_frame_relative_to_t0():
             "Lap": [1, 1],
         }
     )
-    df = T.race_control_frame(msgs, t0, 2025, 1, "R")
+    df = tf.race_control_frame(msgs, t0, 2025, 1, "R")
     assert list(df.columns) == ddl_columns()["race_control"]
     assert df.loc[0, "session_ms"] == 600_000
     assert df.loc[1, "session_ms"] == 0  # before t0 -> clamped
@@ -329,15 +335,13 @@ def test_weather_and_track_status_frames():
             "WindSpeed": [2.6, 2.6],
         }
     )
-    w = T.weather_frame(weather, 2025, 1, "R")
+    w = tf.weather_frame(weather, 2025, 1, "R")
     assert list(w.columns) == ddl_columns()["weather"]
     assert w["session_ms"].tolist() == [7_776, 67_777]
     assert w["rainfall"].tolist() == [False, True]
 
-    ts = pd.DataFrame(
-        {"Time": [TD(seconds=24.491)], "Status": ["4"], "Message": ["SCDeployed"]}
-    )
-    t = T.track_status_frame(ts, 2025, 1, "R")
+    ts = pd.DataFrame({"Time": [TD(seconds=24.491)], "Status": ["4"], "Message": ["SCDeployed"]})
+    t = tf.track_status_frame(ts, 2025, 1, "R")
     assert list(t.columns) == ddl_columns()["track_status"]
     assert (t.loc[0, "session_ms"], t.loc[0, "status"]) == (24_491, 4)
 
@@ -353,7 +357,7 @@ def test_corners_frame():
             "Distance": [350.7, 400.0],
         }
     )
-    df = T.corners_frame(corners, 2025, 1)
+    df = tf.corners_frame(corners, 2025, 1)
     assert list(df.columns) == ddl_columns()["circuit_corners"]
     assert df["corner_letter"].tolist() == ["", "A"]
 

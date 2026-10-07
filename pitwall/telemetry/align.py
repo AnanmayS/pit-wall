@@ -59,12 +59,16 @@ def resample_to_distance(tel: pd.DataFrame, step_m: float = 1.0) -> pd.DataFrame
 
     Elapsed time (session_ms minus the first sample's session_ms), speed and throttle are linearly
     interpolated; brake, gear and drs are step-sampled (value of the nearest previous sample).
-    Duplicate distances keep their first sample, and time is forced to be non-decreasing.
+    Duplicate distances keep their first (earliest) sample, and time is forced to be
+    non-decreasing.
     Grid points before the first sample take the first sample's values.
     """
     if step_m <= 0:
         raise ValueError("step_m must be positive")
-    df = tel.dropna(subset=["distance_m", "session_ms"]).sort_values("distance_m", kind="stable")
+    # Sorting by (distance, time) makes "keep first" of a duplicate distance the earliest sample.
+    df = tel.dropna(subset=["distance_m", "session_ms"]).sort_values(
+        ["distance_m", "session_ms"], kind="stable"
+    )
     if len(df) < 2:
         raise ValueError("need at least two telemetry samples to resample a lap")
 
@@ -142,16 +146,20 @@ def segment_by_corners(
 
     The first segment (turn 1) starts at 0, so it owns the run from the start line; the last
     corner's segment runs to the end of the lap, so it owns the final straight. Corners outside
-    [0, lap_length_m] are dropped. `names` defaults to "T1", "T2", ... in distance order.
+    [0, lap_length_m] are dropped. `names` defaults to "T1", "T2", ... in distance order
+    (numbered before off-lap corners are dropped).
     """
     if names is not None and len(names) != len(corner_distances):
         raise ValueError("names must have the same length as corner_distances")
-    labels = names if names is not None else [f"T{i + 1}" for i in range(len(corner_distances))]
-    pairs = sorted(
-        (float(d), label)
-        for d, label in zip(corner_distances, labels, strict=True)
-        if 0.0 <= float(d) <= lap_length_m
-    )
+    if names is None:
+        ordered = sorted(float(d) for d in corner_distances)
+        pairs = [(d, f"T{i + 1}") for i, d in enumerate(ordered)]
+    else:
+        pairs = sorted(
+            ((float(d), label) for d, label in zip(corner_distances, names, strict=True)),
+            key=lambda p: p[0],
+        )
+    pairs = [(d, label) for d, label in pairs if 0.0 <= d <= lap_length_m]
     if not pairs:
         return []
 
