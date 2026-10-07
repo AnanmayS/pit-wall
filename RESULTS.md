@@ -5,48 +5,51 @@ Nothing is estimated. "Synthetic" marks a workload whose shape was chosen by us;
 still real. Items marked **pending** are waiting on data, not on code.
 
 Machine: Apple Silicon Mac (Darwin 25.3), Docker Desktop, ClickHouse 25.8 and DynamoDB Local in
-containers, Python 3.12, uvicorn single process. Measured 2026-10-06.
+containers, Python 3.12, uvicorn single process. Measured 2026-10-06/07.
 
-Data state at measurement: **45 of 60** 2025 R/Q/S/SQ sessions ingested (the remaining 15 hit
-FastF1's 500-calls/hour limit and are being retried; this file will be updated when they land).
+Data state at measurement: all **60** 2025 R/Q/S/SQ sessions ingested (the first pass loaded 45 before
+FastF1's 500-calls/hour limit; the rest were loaded by the resumable retry script).
 
 ## Milestone 1 — Ingestion + Telemetry Coach
 
 | Metric | Value | Command |
 |---|---|---|
-| Sessions ingested (2025, R/Q/S/SQ) | 45 of 60 | `uv run pitwall ingest status 2025` |
-| Telemetry rows ingested | 25,088,335 | `uv run python benchmarks/ingest_report.py` |
-| Lap rows / pit stops / weather samples | 28,890 / 2,349 / 5,208 | same |
-| Ingestion wall time (45 sessions, FastF1 fetch + transform + insert) | 1,259.7 s (21.0 min), 19,916 telemetry rows/s end to end | same |
-| Of which ClickHouse insert time | 17.6 s | same |
-| Telemetry on disk | 512.7 MB compressed / 1,137.6 MB uncompressed (2.2×) | same (`system.parts`) |
-| Coach `compare_laps` latency, 200 random pairs, 45 sessions | p50 26.6 ms · p95 29.7 ms · p99 34.4 ms | `uv run python benchmarks/coach_latency.py --iterations 200 --warmup 20 --season 2025` |
+| Sessions ingested (2025, R/Q/S/SQ) | 60 of 60 (24 R, 24 Q, 6 S, 6 SQ) | `uv run pitwall ingest status 2025` |
+| Telemetry rows ingested | 32,359,729 | `uv run python benchmarks/ingest_report.py` |
+| Lap rows / pit stops / weather samples | 37,666 / 2,983 / 6,775 | same |
+| Ingestion wall time, full season (60 sessions, FastF1 fetch + transform + insert, sequential) | 1,596.4 s (26.6 min), 20,271 telemetry rows/s end to end | same |
+| Of which ClickHouse insert time | 22.6 s | same |
+| Telemetry on disk | 658.5 MB compressed / 1,457.6 MB uncompressed (2.2×) | same (`system.parts`) |
+| Coach `compare_laps` latency, 200 random pairs, idle machine (45 sessions, 25 M rows) | p50 26.6 ms · p95 29.7 ms · p99 34.4 ms | `uv run python benchmarks/coach_latency.py --iterations 200 --warmup 20 --season 2025` |
 | Of which the two telemetry range reads | p50 9.5 ms · p99 13.4 ms; 8,192 rows read per lap (one granule) | same |
-| `GET /api/compare` over HTTP (uvicorn, local) | p50 31 ms · p95 35 ms · p99 43 ms (n=191) | `uv run python benchmarks/api_latency.py --season 2025 --n 200` |
+| Coach `compare_laps` latency, 300 pairs, full season (32 M rows) with uvicorn + Next dev server running | p50 27.3 ms · p95 62.6 ms · p99 82.2 ms | `uv run python benchmarks/coach_latency.py --iterations 300 --warmup 30 --season 2025` |
+| `GET /api/compare` over HTTP (uvicorn, local), full season | p50 30 ms · p95 40 ms · p99 90 ms (n=194) | `uv run python benchmarks/api_latency.py --season 2025 --n 200` |
 
-Latency did not move between 1.1 M rows (first session only: p50 23.8 ms) and 25 M rows, which is
-the point of the primary key: each lap is one contiguous granule range.
+The median did not move between 1.1 M rows (first session only: p50 23.8 ms), 25 M and 32 M rows,
+which is the point of the primary key: each lap is one contiguous granule range (8,192 rows read).
+The p99 is sensitive to other processes on the laptop (the two runs above differ only in what else was
+running); the telemetry reads themselves stayed at p50 10 ms.
 
 ## Milestone 2 — Simulator + What If + AI
 
 | Metric | Value | Command |
 |---|---|---|
 | Simulator throughput (20 drivers, 57 laps, synthetic params) | 9,528 sims/s; 10,000-run scenario in 1,050 ms (median of 5) | `uv run python benchmarks/sim_throughput.py --runs 10000` |
-| What If end to end, cold (fit from ClickHouse + 10k runs + DynamoDB write), HTTP | p50 711 ms · p99 1,220 ms (n=16) | `uv run python benchmarks/api_latency.py --season 2025 --n 200` |
-| What If cached (DynamoDB hit), HTTP | p50 10.2 ms · p99 16.9 ms (n=64) | same |
-| DynamoDB cache hit rate under a synthetic Zipf(1.2) access log, 600 requests over 55 distinct scenarios | 93.0 % (cold p50 749 ms, cached p50 7.8 ms) | `uv run python benchmarks/whatif_cache.py --season 2025 --rounds 2,3,4,5,6,7,8,9,10 --scenarios 60 --requests 600 --zipf 1.2` |
+| What If end to end, cold (fit from ClickHouse + 10k runs + DynamoDB write), HTTP | p50 662 ms · p99 1,330 ms (n=20) | `uv run python benchmarks/api_latency.py --season 2025 --n 200` |
+| What If cached (DynamoDB hit), HTTP | p50 9.0 ms · p99 26.6 ms (n=80) | same |
+| DynamoDB cache hit rate under a synthetic Zipf(1.2) access log, 600 requests over 55 distinct scenarios across 17 races | 91.7 % (cold p50 766 ms, cached p50 8.2 ms) | `uv run python benchmarks/whatif_cache.py --season 2025 --rounds 2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,24 --scenarios 60 --requests 600 --zipf 1.2` |
 | Scenarios created / shared by real users | not launched | — |
 
 ### Simulator backtest (simulate from the grid with the real strategies, compare to the classification)
 
 | Metric | All races | Dry races | Command |
 |---|---|---|---|
-| Races (2025, ingested so far; R1 and R12 flagged wet) | 19 | 17 | `uv run python -m pitwall.sim.backtest 2025 --sims 5000` |
-| MAE of expected finishing position | 2.57 | 2.49 | |
-| Spearman rank correlation (mean) | 0.76 | 0.77 | |
-| Winner hit rate (argmax P(win) = actual winner) | 63 % | 65 % | |
-| Podium overlap (mean, out of 3) | 2.26 | 2.24 | |
-| Mean log-score of the actual position | −2.27 | −2.23 | |
+| Races (all 24 of 2025; R1 and R12 flagged wet) | 24 | 22 | `uv run python -m pitwall.sim.backtest 2025 --sims 5000` |
+| MAE of expected finishing position | 2.56 | 2.49 | |
+| Spearman rank correlation (mean) | 0.77 | 0.78 | |
+| Winner hit rate (argmax P(win) = actual winner) | 62 % | 64 % | |
+| Podium overlap (mean, out of 3) | 2.17 | 2.14 | |
+| Mean log-score of the actual position | −2.26 | −2.23 | |
 
 Per-race rows: `data/bench/backtest.json` (regenerated by the command above).
 
@@ -63,7 +66,7 @@ Per-race rows: `data/bench/backtest.json` (regenerated by the command above).
 | Metric | Value | Command |
 |---|---|---|
 | Polymarket markets stored | 7,618 (2024: 136 · 2025: 2,631 · 2026: 4,851) | `uv run python benchmarks/polymarket_report.py` |
-| Hourly price points stored | 265,810 at first run (2025 race winners, 2026 champion + race winners); more being fetched | same |
+| Hourly price points stored | 546,403 across 1,049 markets (2024-08-29 → 2026-10-07): 2025 race winners 105,080 · 2025 champion 102,472 · 2026 race winners 185,121 · 2026 champion 142,788 · 2024 race winners 10,942 | same |
 | Race-winner events mapped to a calendar round | 2024 8/8 · 2025 24/24 · 2026 19/20 (the unmapped one is a cancelled April Bahrain event) | same |
 
 ### Pre-race win probability, ours vs Polymarket (2025, Brier score, lower is better)
