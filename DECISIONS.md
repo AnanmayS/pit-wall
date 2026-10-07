@@ -50,3 +50,36 @@ Practice sessions triple the data volume and add little for the three features. 
 
 ## D11. API on port 8080
 DynamoDB Local owns 8000 in docker compose.
+
+## D12. Real pit stops are detected from tyre-life resets, not FastF1 stint numbers (2026-10-06)
+At Australia 2025 the safety car led the field through the pit lane on laps 2-4; FastF1 records each
+pass as a pit in/out and a new stint with the same compound. A stop is counted as a tyre change only
+when `tyre_life` resets to 1 or the compound changes. The raw `pit_stops` table keeps every pass so
+the rule can be revisited.
+
+## D13. Coach aligns on a length-normalised distance grid
+FastF1 integrates distance from speed, so the same lap measures ±0.5 % differently per driver. Both
+laps are rescaled to their mean length before aligning; the raw lengths are returned in `meta`. The
+official lap-time difference is reported as `total_delta_ms`; the telemetry-derived end-of-lap delta is
+reported separately so disagreement is visible.
+
+## D14. Brake point = start of the longest braking zone in the window
+The literal "first brake-on sample" rule picked up stray brake dabs on real data. Braking zones with
+gaps under 20 m are merged; the window is bounded by the neighbouring corners.
+
+## D15. Wet races are flagged, not silently fitted
+When more than 20 % of clean laps are on intermediates/wets, the fit marks `wet_race` and the backtest
+reports wet and dry races separately. The pace/tyre model is not designed for a drying track.
+
+## D16. Single-race fits are shrunk toward defaults and every fallback is labelled
+SC/VSC hazard from one race is pooled with a prior of 100 laps; tyre offsets are clipped to ±3 s;
+implausible fuel or degradation slopes fall back to labelled defaults. `RaceParams.assumptions`
+travels with every result so the UI and the AI can show what was fitted vs assumed.
+
+## D17. Manual tool-use loop instead of the SDK tool runner
+The grounding check needs every tool result and input captured, and a failed check must trigger one
+rewrite before refusing. The runner hides the history; the manual loop is ~60 lines.
+
+## D18. What If cold vs cached is served by the same endpoint
+`POST /api/whatif` computes on a miss and returns `cache_hit` either way, so hit rate can be measured
+from logs under a replayed access pattern rather than claimed.

@@ -14,6 +14,7 @@ from clickhouse_connect.driver.exceptions import ClickHouseError
 from fastapi import FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from pitwall.telemetry import coach, queries
 from pitwall.telemetry.models import (
@@ -23,6 +24,9 @@ from pitwall.telemetry.models import (
     LapSummary,
     SessionInfo,
 )
+from pitwall.whatif import store
+from pitwall.whatif.models import ScenarioSpec
+from pitwall.whatif.service import open_shared, run_or_cached
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +69,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
-        allow_methods=["GET"],
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
 
@@ -132,6 +136,43 @@ def create_app() -> FastAPI:
             lap_b=_lap_number(lap_b, "lap_b"),
             step_m=step_m,
         )
+
+    # ---- What If (milestone 2) ----
+    @app.post("/api/whatif")
+    def whatif_run(spec: ScenarioSpec) -> dict:
+        """Run a scenario (or return the cached result) and return it with its share id."""
+        try:
+            return run_or_cached(spec).to_dict()
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+
+    @app.get("/api/whatif/recent")
+    def whatif_recent(
+        season: Annotated[int, Query(ge=1950, le=2100)], round: Annotated[int, Query(ge=1, le=30)]
+    ) -> list[dict]:
+        return store.list_recent(season, round)
+
+    @app.get("/api/whatif/{scenario_id}")
+    def whatif_get(scenario_id: Annotated[str, Path(pattern=r"^[0-9A-Za-z]{8,16}$")]) -> dict:
+        resp = open_shared(scenario_id)
+        if resp is None:
+            raise HTTPException(404, f"Unknown scenario {scenario_id}")
+        return resp.to_dict()
+
+    # ---- AI (milestone 2) ----
+    class AskRequest(BaseModel):
+        question: str = Field(min_length=3, max_length=500)
+        effort: str = Field(default="medium", pattern="^(low|medium|high)$")
+
+    @app.post("/api/ask")
+    def ask_endpoint(req: AskRequest) -> dict:
+        from pitwall.ai.ask import ask
+
+        try:
+            return ask(req.question, effort=req.effort).to_dict()
+        except Exception as e:  # noqa: BLE001 - surface SDK/config errors as 503
+            log.exception("ask failed")
+            raise HTTPException(503, f"AI layer unavailable: {type(e).__name__}: {e}") from e
 
     return app
 
