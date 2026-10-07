@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # DynamoDB
     dynamodb_endpoint_url: str | None = "http://localhost:8000"
     aws_region: str = "us-east-1"
+    # Only used when dynamodb_endpoint_url points at DynamoDB Local; real AWS uses the default chain.
+    aws_access_key_id: str = "local"
+    aws_secret_access_key: str = "local"
     pitwall_ddb_table: str = "pitwall"
 
     # FastF1
