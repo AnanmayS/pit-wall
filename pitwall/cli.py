@@ -22,7 +22,9 @@ def _setup_logging(verbose: bool = False) -> None:
     )
     import fastf1
 
-    fastf1.set_log_level("WARNING")  # FastF1's INFO output is very chatty
+    # FastF1 has its own handler; keep its (chatty) output at WARNING and don't echo it twice.
+    fastf1.set_log_level("WARNING")
+    logging.getLogger("fastf1").propagate = False
 
 
 @db_app.command("migrate")

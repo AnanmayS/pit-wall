@@ -100,15 +100,15 @@ def collect_status(client: Client, season: int | None = None) -> IngestStatus:
     )
 
 
-def format_table(headers: list[str], rows: list[list[str]]) -> str:
-    """Plain fixed-width text table (first column left-aligned, the rest right-aligned)."""
+def format_table(headers: list[str], rows: list[list[str]], left: int = 1) -> str:
+    """Plain fixed-width text table: the first `left` columns left-aligned, the rest right."""
     widths = [
         max(len(h), *(len(r[i]) for r in rows)) if rows else len(h) for i, h in enumerate(headers)
     ]
 
     def fmt(cells: list[str]) -> str:
         return "  ".join(
-            c.ljust(w) if i == 0 else c.rjust(w)
+            c.ljust(w) if i < left else c.rjust(w)
             for i, (c, w) in enumerate(zip(cells, widths, strict=True))
         )
 
@@ -144,4 +144,4 @@ def status_text(status: IngestStatus) -> str:
         f"\ntotal ingest seconds (all {status.total_runs} recorded runs): "
         f"{status.total_ingest_seconds:.1f}"
     )
-    return format_table(headers, rows) + summary
+    return format_table(headers, rows, left=2) + summary

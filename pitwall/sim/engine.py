@@ -80,6 +80,10 @@ class RaceParams:
     follow_gap: float = 0.9  # seconds a held-up car sits behind the car ahead
     grid_slot_gap: float = 0.35  # lap-1 time lost per grid slot
     stop_lap_jitter: float = 1.0  # std-dev (laps) of random variation around planned stop laps
+    forced_sc: dict[int, int] = field(default_factory=dict)  # lap -> SC duration (laps), every sim
+    forced_dnf: dict[str, int] = field(
+        default_factory=dict
+    )  # driver -> lap of retirement, every sim
     seed: int | None = None
     assumptions: dict[str, str] = field(default_factory=dict)  # labels for unfitted parameters
 
@@ -287,6 +291,10 @@ def simulate(
         # --- safety car / VSC deployment ---
         no_neutralisation = (st.sc_remaining == 0) & (st.vsc_remaining == 0)
         new_sc = no_neutralisation & (rng.random(n_sims) < params.sc_hazard)
+        if lap in params.forced_sc:
+            new_sc = no_neutralisation | True
+            st.sc_remaining = np.full(n_sims, max(1, params.forced_sc[lap]), dtype=np.int32)
+            st.vsc_remaining[:] = 0
         st.sc_remaining = np.where(
             new_sc, np.maximum(1, rng.poisson(params.sc_mean_laps, n_sims)), st.sc_remaining
         )
@@ -346,6 +354,9 @@ def simulate(
         # --- retirements ---
         hazard = dnf_hazard * (params.lap1_dnf_multiplier if lap == 1 else 1.0)
         dnf_now = st.alive & (rng.random((n_sims, n)) < hazard)
+        for drv, dnf_lap in params.forced_dnf.items():
+            if dnf_lap == lap and drv in params.drivers:
+                dnf_now[:, params.drivers.index(drv)] = st.alive[:, params.drivers.index(drv)]
         st.alive &= ~dnf_now
 
         # --- advance time with overtaking resolution ---
