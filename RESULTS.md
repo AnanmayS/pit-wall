@@ -22,13 +22,14 @@ FastF1's 500-calls/hour limit; the rest were loaded by the resumable retry scrip
 | Telemetry on disk | 658.5 MB compressed / 1,457.6 MB uncompressed (2.2×) | same (`system.parts`) |
 | Coach `compare_laps` latency, 200 random pairs, idle machine (45 sessions, 25 M rows) | p50 26.6 ms · p95 29.7 ms · p99 34.4 ms | `uv run python benchmarks/coach_latency.py --iterations 200 --warmup 20 --season 2025` |
 | Of which the two telemetry range reads | p50 9.5 ms · p99 13.4 ms; 8,192 rows read per lap (one granule) | same |
-| Coach `compare_laps` latency, 300 pairs, full season (32 M rows) with uvicorn + Next dev server running | p50 27.3 ms · p95 62.6 ms · p99 82.2 ms | `uv run python benchmarks/coach_latency.py --iterations 300 --warmup 30 --season 2025` |
+| Coach `compare_laps` latency, 300 random pairs, full season (32 M rows), quiet machine | p50 28.1 ms · p95 37.6 ms · p99 44.4 ms | `uv run python benchmarks/coach_latency.py --iterations 300 --warmup 30 --season 2025` |
+| Of which the two telemetry range reads (full season) | p50 8.8 ms · p99 14.8 ms | same |
 | `GET /api/compare` over HTTP (uvicorn, local), full season | p50 30 ms · p95 40 ms · p99 90 ms (n=194) | `uv run python benchmarks/api_latency.py --season 2025 --n 200` |
 
 The median did not move between 1.1 M rows (first session only: p50 23.8 ms), 25 M and 32 M rows,
 which is the point of the primary key: each lap is one contiguous granule range (8,192 rows read).
-The p99 is sensitive to other processes on the laptop (the two runs above differ only in what else was
-running); the telemetry reads themselves stayed at p50 10 ms.
+A run taken while a season ingest and two other benchmarks were executing concurrently gave p99 82 ms
+with the same p50, so the tail is CPU contention on the laptop, not the query.
 
 ## Milestone 2 — Simulator + What If + AI
 
@@ -83,4 +84,27 @@ Reading: the market is better, by a wide margin once it has seen qualifying and 
 before. The gap before qualifying is the honest size of what the recent-form model is missing
 (track-specific pace, upgrades, weather). Per-race rows: `data/bench/odds_score_{1h,48h}.json`.
 
-| Live 2026 title odds after each session | **pending: 2026 laps ingest** | `uv run pitwall odds forecast --season 2026` |
+### Live 2026 forecast (after round 16, 7 rounds left, measured 2026-10-07)
+
+| Metric | Value | Command |
+|---|---|---|
+| 2026 sessions ingested (laps only) | 41 (R/Q/S/SQ through round 16) | `uv run pitwall ingest status 2026` |
+| Season Monte Carlo, 100,000 sims × 7 remaining rounds (+1 sprint) | 113.5 s wall | `uv run pitwall odds forecast --season 2026 --sims 100000` |
+| Standings after R16 | ANT 320 · RUS 236 · HAM 214 (max 183 points left) | `SELECT ... FROM results` (see pitwall/odds/season.py) |
+| P(drivers' title): ours vs Polymarket (latest price, 2026-10-07 02:18 UTC) | ANT 100.0 % vs 96.7 %; RUS 0.0 % vs 1.0 % | forecast above; `pm_prices` |
+| P(next race win), ours | VER 29.1 % · LEC 24.2 % · ANT 15.2 % · HAD 14.8 % · RUS 10.2 % | same |
+
+Reading: our title probability is more extreme than the market's. With an 84-point lead and 183
+available the market still prices ~3 % of tail risk (injury, disqualification, team orders) that the
+race model does not represent. Stored as forecast rows so the next sessions chart the movement.
+
+### Pre-race win probability, 2026 so far (live season, same method as 2025)
+
+| Market sampled | Races | Our Brier | Market Brier | Our log-loss | Market log-loss | Races we beat the market | Command |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 1 h before the race | 15 | 0.641 | 0.593 | 1.405 | 1.195 | 8/15 | `uv run pitwall odds score --season 2026 --sims 5000 --hours-before 1` |
+| 48 h before the race (before qualifying) | 14 | 0.619 | 0.875 | 1.357 | 1.952 | 9/14 | `uv run pitwall odds score --season 2026 --sims 5000 --hours-before 48` |
+
+Across both seasons (32 + 29 scored races): before qualifying our recent-form model is competitive with
+the market (better in 2026, worse in 2025); once the market has seen qualifying it is better in both.
+Per-race rows: `data/bench/odds_score_2026_{1h,48h}.json`.
