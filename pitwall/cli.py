@@ -7,11 +7,14 @@ from typing import Annotated
 
 import typer
 
+from pitwall.odds.cli import odds_app
+
 app = typer.Typer(help="Pit Wall: F1 telemetry, simulation and odds.", no_args_is_help=True)
 db_app = typer.Typer(help="ClickHouse schema management.", no_args_is_help=True)
 ingest_app = typer.Typer(help="Load FastF1 sessions into ClickHouse.", no_args_is_help=True)
 app.add_typer(db_app, name="db")
 app.add_typer(ingest_app, name="ingest")
+app.add_typer(odds_app, name="odds")
 
 
 def _setup_logging(verbose: bool = False) -> None:

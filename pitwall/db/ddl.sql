@@ -203,3 +203,51 @@ CREATE TABLE IF NOT EXISTS ingest_runs (
     fastf1_version  String
 ) ENGINE = MergeTree
 ORDER BY (started_at, season, round, session_type, table);
+
+-- Polymarket markets (Gamma API), one row per binary market. Re-fetching replaces the row
+-- (ReplacingMergeTree on fetched_at). Timestamps are UTC.
+CREATE TABLE IF NOT EXISTS pm_markets (
+    market_id       String,                       -- Gamma market id
+    condition_id    String,
+    event_slug      String,
+    event_title     String,
+    question        String,
+    market_kind     LowCardinality(String),       -- season_champion | constructors_champion | race_winner | race_podium | race_pole | other
+    season          UInt16,
+    round           Nullable(UInt8),              -- race-level markets mapped to the calendar; NULL if unknown
+    driver          LowCardinality(String),       -- 3-letter code, OTHER, PLACEHOLDER, UNKNOWN; '' if not a driver market
+    team            LowCardinality(String),       -- constructors markets only (FastF1-style team name)
+    yes_token_id    String,                       -- CLOB token id of the "Yes" outcome
+    created_at      DateTime('UTC'),
+    end_date        DateTime('UTC'),
+    closed          Bool,
+    resolved_outcome Nullable(UInt8),             -- 1 = Yes won, 0 = No won, NULL = unresolved
+    fetched_at      DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(fetched_at)
+ORDER BY (market_id);
+
+-- Polymarket "Yes" price history (CLOB prices-history), one row per market per point.
+CREATE TABLE IF NOT EXISTS pm_prices (
+    market_id       String,
+    ts              DateTime('UTC'),
+    price           Float32,                      -- Yes price, 0..1
+    fidelity_min    UInt16                        -- sampling resolution requested from the CLOB, minutes
+) ENGINE = ReplacingMergeTree
+ORDER BY (market_id, ts);
+
+-- Season forecasts written after each session (title, next-race win, constructors).
+-- round is NULL for season-long kinds, hence allow_nullable_key.
+CREATE TABLE IF NOT EXISTS forecasts (
+    season          UInt16,
+    as_of           DateTime,
+    after_round     UInt8,
+    kind            LowCardinality(String),       -- title | race_win | constructors
+    round           Nullable(UInt8),
+    driver          LowCardinality(String),
+    team            LowCardinality(String),
+    probability     Float32,
+    n_sims          UInt32,
+    model_version   LowCardinality(String)
+) ENGINE = ReplacingMergeTree
+ORDER BY (season, kind, as_of, round, driver)
+SETTINGS allow_nullable_key = 1;

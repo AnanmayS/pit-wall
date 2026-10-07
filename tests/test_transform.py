@@ -117,7 +117,8 @@ def make_raw_telemetry(n: int = 6) -> pd.DataFrame:
 
 def test_schemas_match_ddl_columns_exactly():
     ddl = ddl_columns()
-    assert set(ddl) - {"ingest_runs"} == set(tf.SCHEMAS)
+    not_ingested = {"ingest_runs", "pm_markets", "pm_prices", "forecasts"}  # odds tables
+    assert set(ddl) - not_ingested == set(tf.SCHEMAS)
     for table, cols in tf.SCHEMAS.items():
         assert list(cols) == ddl[table], table
 
