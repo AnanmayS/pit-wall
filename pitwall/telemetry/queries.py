@@ -186,7 +186,7 @@ def list_laps(
                tyre_life, is_personal_best, is_accurate, deleted,
                pit_in_session_ms IS NOT NULL AS pit_in,
                pit_out_session_ms IS NOT NULL AS pit_out,
-               track_status
+               track_status, position
         FROM laps FINAL
         """
         + _SESSION_FILTER
@@ -198,7 +198,7 @@ def list_laps(
     )
     laps = []
     for r in df.to_dict(orient="records"):
-        for key in ("lap_time_ms", "sector1_ms", "sector2_ms", "sector3_ms"):
+        for key in ("lap_time_ms", "sector1_ms", "sector2_ms", "sector3_ms", "position"):
             value = _none_if_null(r[key])
             r[key] = None if value is None else int(value)
         laps.append(LapSummary(**r))

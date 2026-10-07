@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from pitwall.telemetry.align import (
+    braking_zones,
     corner_metrics,
     corner_name,
     delta_time,
@@ -224,16 +225,46 @@ def test_brake_points_differ_by_known_offset():
     assert ma.brake_point_m - mb.brake_point_m == pytest.approx(8.0)
 
 
-def test_corner_metrics_without_braking_and_ongoing_braking():
+def test_brake_point_is_start_of_the_main_braking_zone():
+    tel = corner_lap(brake_point_m=700.0, apex_kph=100.0, throttle_on_m=860.0)
+    d = tel["distance_m"]
+    tel["brake"] = (
+        d.between(600, 604)  # an early dab: ignored
+        | d.between(700, 730)
+        | d.between(740, 789)  # 10 m flicker inside the real zone: merged
+    )
+    grid = resample_to_distance(tel)
+    m = corner_metrics(grid, 800.0)
+    assert m.brake_point_m == 700.0
+    starts, ends = braking_zones(grid["distance_m"].to_numpy(), grid["brake"].to_numpy())
+    assert starts.tolist() == [600.0, 700.0]
+    assert ends.tolist() == [605.0, 789.0]  # step-sampled: held until the next 2 m sample
+
+
+def test_corner_metrics_flat_out_corner():
     flat_out = resample_to_distance(constant_speed_lap(250.0))
     m = corner_metrics(flat_out, 500.0)
     assert m.brake_point_m is None
-    assert m.throttle_on_m == m.min_speed_m  # never lifts
+    assert m.throttle_on_m is None  # never lifted, so there is no throttle application
 
+
+def test_corner_metrics_ignores_braking_that_started_before_the_window():
     grid = resample_to_distance(corner_lap(brake_point_m=600.0, apex_kph=90.0, throttle_on_m=860.0))
-    # A 100 m window opens while the car is already braking: report the real onset.
+    # e.g. the second part of a chicane: the window starts at the previous corner
     m = corner_metrics(grid, 800.0, window_before_m=100.0)
-    assert m.brake_point_m == 600.0
+    assert m.brake_point_m is None
+    assert m.apex_found and m.min_speed_m == 800.0
+
+
+def test_corner_metrics_no_apex_when_speed_minimum_is_on_the_window_edge():
+    # still accelerating out of the corner at 800 m when the next window opens at 850 m
+    grid = resample_to_distance(
+        corner_lap(brake_point_m=700.0, apex_kph=100.0, throttle_on_m=860.0)
+    )
+    m = corner_metrics(grid, 950.0, window_before_m=100.0, segment_start_m=850.0)
+    assert not m.apex_found
+    assert m.min_speed_m == 850.0
+    assert m.throttle_on_m is None
 
 
 # ---------------------------------------------------------------------------
@@ -350,3 +381,54 @@ def test_formatting():
     assert format_seconds(84.0, 3) == "0.084"
     assert format_lap_time(75_096) == "1:15.096"
     assert format_lap_time(59_999) == "0:59.999"
+
+
+def _corner(**overrides):
+    from pitwall.telemetry.models import CornerComparison
+
+    values = dict(
+        name="T6",
+        distance_m=1870.0,
+        brake_point_a_m=None,
+        brake_point_b_m=None,
+        brake_delta_m=None,
+        apex_speed_a_kph=200.0,
+        apex_speed_b_kph=200.0,
+        apex_a_m=1870.0,
+        apex_b_m=1870.0,
+        apex_found_a=True,
+        apex_found_b=True,
+        throttle_on_a_m=None,
+        throttle_on_b_m=None,
+        max_speed_before_a_kph=300.0,
+        max_speed_before_b_kph=300.0,
+        max_speed_after_a_kph=280.0,
+        max_speed_after_b_kph=280.0,
+        delta_ms=50.0,
+    )
+    return CornerComparison(**(values | overrides))
+
+
+def test_corner_insight_wording_and_thresholds():
+    from pitwall.telemetry.coach import corner_insight
+
+    assert corner_insight(_corner(delta_ms=5.0), "VER", "NOR") is None  # below 10 ms
+
+    fallback = corner_insight(_corner(), "VER", "NOR")
+    assert fallback.text == "NOR is quicker than VER through T6, worth 0.050 s"
+    assert fallback.kind == "corner" and fallback.delta_ms == 50.0
+
+    traction = corner_insight(
+        _corner(throttle_on_a_m=1900.0, throttle_on_b_m=1885.0, max_speed_after_b_kph=285.0),
+        "VER",
+        "NOR",
+    )
+    assert traction.text == (
+        "NOR gets back on full throttle 15 m earlier than VER out of T6 "
+        "and is 5 km/h quicker on the exit, worth 0.050 s"
+    )
+    # Apex/exit comparisons are skipped when one driver has no apex in the window.
+    no_apex = corner_insight(
+        _corner(apex_found_a=False, apex_speed_b_kph=210.0, delta_ms=-120.0), "VER", "NOR"
+    )
+    assert no_apex.text == "VER is quicker than NOR through T6, worth 0.12 s"

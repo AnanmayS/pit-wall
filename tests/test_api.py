@@ -130,6 +130,15 @@ def test_compare_shape_defaults_to_fastest_laps(client: TestClient):
     assert insight["text"].startswith("VER brakes 8 m later than NOR into T1")
 
 
+def test_compare_accepts_fastest_and_explicit_laps(client: TestClient):
+    base = {"season": 2025, "round": 1, "session_type": "Q", "driver_a": "VER", "driver_b": "NOR"}
+    r = client.get("/api/compare", params=base | {"lap_a": "fastest", "lap_b": "4"})
+    assert r.status_code == 200, r.text
+    assert (r.json()["meta"]["lap_a"], r.json()["meta"]["lap_b"]) == (5, 4)
+    assert client.get("/api/compare", params=base | {"lap_a": "best"}).status_code == 422
+    assert client.get("/api/compare", params=base | {"lap_b": "0"}).status_code == 422
+
+
 def test_compare_missing_telemetry_is_404(client: TestClient):
     r = client.get(
         "/api/compare",
@@ -144,6 +153,23 @@ def test_compare_missing_telemetry_is_404(client: TestClient):
     )
     assert r.status_code == 404
     assert r.json()["detail"] == "No telemetry for VER lap 3 in 2025 round 1 Q"
+
+
+def test_compare_degenerate_telemetry_is_404(client: TestClient, monkeypatch):
+    stationary = TELEMETRY[("NOR", 4)].iloc[:5].assign(distance_m=0.0)
+    monkeypatch.setitem(TELEMETRY, ("NOR", 4), stationary)
+    r = client.get(
+        "/api/compare",
+        params={
+            "season": 2025,
+            "round": 1,
+            "session_type": "Q",
+            "driver_a": "VER",
+            "driver_b": "NOR",
+        },
+    )
+    assert r.status_code == 404
+    assert r.json()["detail"] == "No usable telemetry for NOR lap 4 in 2025 round 1 Q"
 
 
 def test_compare_driver_without_timed_laps_is_404(client: TestClient):

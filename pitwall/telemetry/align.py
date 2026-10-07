@@ -19,6 +19,8 @@ import pandas as pd
 
 # Throttle at or above this value counts as "full throttle".
 FULL_THROTTLE_PCT = 90.0
+# Brake-off gaps shorter than this are treated as one braking zone (sensor flicker, re-applies).
+BRAKE_MERGE_GAP_M = 20.0
 
 GRID_COLUMNS = ["distance_m", "time_ms", "speed_kph", "throttle_pct", "brake", "gear", "drs"]
 _INTERPOLATED = ("speed_kph", "throttle_pct")
@@ -45,6 +47,8 @@ class CornerMetrics:
     min_speed_m: float  # apex position
     throttle_on_m: float | None  # first point after the apex at >= FULL_THROTTLE_PCT
     max_speed_before_kph: float  # top speed on the approach (window start .. apex)
+    max_speed_after_kph: float  # top speed on the exit (apex .. segment end or window end)
+    apex_found: bool = True  # False when speed is lowest at the window edge (no real apex)
     full_throttle_pct: float | None = None  # share of the segment's distance at full throttle
     segment_time_ms: float | None = None  # time spent in the segment
 
@@ -188,13 +192,19 @@ def corner_metrics(
 ) -> CornerMetrics:
     """Braking, apex and traction metrics of one driver for one corner.
 
-    * brake_point_m: first False->True brake transition in [corner - window_before, corner]. If the
-      driver is already braking when the window opens, the onset just before the window is used.
+    * brake_point_m: start of the main braking zone, i.e. the first False->True brake transition
+      of the longest braking zone that starts in [corner - window_before, corner]. Zones split by
+      gaps shorter than BRAKE_MERGE_GAP_M count as one, so a short dab of the brake before or
+      after the real zone is ignored. Braking already under way when the window opens belongs to
+      an earlier corner and is not counted; with no braking zone the result is None.
     * apex: minimum speed in [corner - window_before, corner + window_after], clipped to the
-      segment bounds when given (so a neighbouring corner's apex is not picked up).
+      segment bounds when given (so a neighbouring corner's apex is not picked up). apex_found is
+      False when the minimum sits on the window edge, i.e. the car is still slowing down or
+      speeding up there and has no apex of its own inside the window.
     * throttle_on_m: first point after the apex with throttle >= FULL_THROTTLE_PCT, searched up to
-      corner + window_after.
+      corner + window_after. None when there is no apex or the driver never lifted.
     * max_speed_before_kph: top speed between the window start and the apex.
+    * max_speed_after_kph: top speed between the apex and the segment end (or window end).
     * full_throttle_pct / segment_time_ms: only when segment bounds are given.
     """
     dist = grid["distance_m"].to_numpy()
@@ -205,16 +215,7 @@ def corner_metrics(
     win_start = corner_distance_m - window_before_m
     win_end = corner_distance_m + window_after_m
 
-    # Braking onset: index i where brake[i] and not brake[i - 1].
-    onset = brake & ~np.concatenate([[False], brake[:-1]])
-    in_brake_window = (dist >= win_start) & (dist <= corner_distance_m)
-    brake_point: float | None = None
-    window_onsets = np.flatnonzero(onset & in_brake_window)
-    if window_onsets.size:
-        brake_point = float(dist[window_onsets[0]])
-    elif (brake & in_brake_window).any():
-        earlier = np.flatnonzero(onset & (dist < win_start))
-        brake_point = float(dist[earlier[-1]]) if earlier.size else float(dist[in_brake_window][0])
+    brake_point = _main_brake_onset(dist, brake, win_start, corner_distance_m)
 
     apex_lo = win_start if segment_start_m is None else max(win_start, segment_start_m)
     apex_hi = win_end if segment_end_m is None else min(win_end, segment_end_m)
@@ -223,15 +224,23 @@ def corner_metrics(
         apex_mask = np.zeros_like(brake)
         apex_mask[int(np.argmin(np.abs(dist - corner_distance_m)))] = True
     apex_candidates = np.flatnonzero(apex_mask)
-    apex_idx = int(apex_candidates[np.argmin(speed[apex_candidates])])
+    apex_pos = int(np.argmin(speed[apex_candidates]))
+    apex_idx = int(apex_candidates[apex_pos])
     apex_m = float(dist[apex_idx])
+    apex_found = 0 < apex_pos < len(apex_candidates) - 1
 
-    after_apex = (dist >= apex_m) & (dist <= max(win_end, apex_m)) & (throttle >= FULL_THROTTLE_PCT)
-    on_idx = np.flatnonzero(after_apex)
-    throttle_on = float(dist[on_idx[0]]) if on_idx.size else None
+    lifted = bool((throttle[apex_candidates[: apex_pos + 1]] < FULL_THROTTLE_PCT).any())
+    throttle_on: float | None = None
+    if apex_found and lifted:
+        after_apex = (dist >= apex_m) & (dist <= win_end) & (throttle >= FULL_THROTTLE_PCT)
+        on_idx = np.flatnonzero(after_apex)
+        throttle_on = float(dist[on_idx[0]]) if on_idx.size else None
 
     approach = (dist >= win_start) & (dist <= apex_m)
     max_before = float(speed[approach].max()) if approach.any() else float(speed[apex_idx])
+    exit_end = win_end if segment_end_m is None else segment_end_m
+    exit_mask = (dist >= apex_m) & (dist <= exit_end)
+    max_after = float(speed[exit_mask].max()) if exit_mask.any() else float(speed[apex_idx])
 
     full_pct: float | None = None
     seg_time: float | None = None
@@ -250,9 +259,39 @@ def corner_metrics(
         min_speed_m=apex_m,
         throttle_on_m=throttle_on,
         max_speed_before_kph=max_before,
+        max_speed_after_kph=max_after,
+        apex_found=apex_found,
         full_throttle_pct=full_pct,
         segment_time_ms=seg_time,
     )
+
+
+def braking_zones(dist: np.ndarray, brake: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(start, end) distances of braking zones, merging zones separated by short gaps."""
+    padded = np.concatenate([[False], brake, [False]]).astype(np.int8)
+    edges = np.diff(padded)
+    starts = np.flatnonzero(edges == 1)  # index of the first braking sample
+    ends = np.flatnonzero(edges == -1) - 1  # index of the last braking sample
+    if starts.size == 0:
+        return np.empty(0), np.empty(0)
+    start_m, end_m = dist[starts], dist[ends]
+    # A zone continues the previous one when the gap between them is short.
+    joins = np.concatenate([[False], (start_m[1:] - end_m[:-1]) < BRAKE_MERGE_GAP_M])
+    keep_start = ~joins
+    keep_end = np.concatenate([keep_start[1:], [True]])
+    return start_m[keep_start], end_m[keep_end]
+
+
+def _main_brake_onset(
+    dist: np.ndarray, brake: np.ndarray, window_start_m: float, window_end_m: float
+) -> float | None:
+    """Start of the longest braking zone that begins inside [window_start_m, window_end_m]."""
+    starts, ends = braking_zones(dist, brake)
+    inside = (starts >= window_start_m) & (starts <= window_end_m)
+    if not inside.any():
+        return None
+    lengths = np.where(inside, ends - starts, -1.0)
+    return float(starts[int(np.argmax(lengths))])
 
 
 def downsample_indices(n: int, max_points: int = 2000) -> np.ndarray:

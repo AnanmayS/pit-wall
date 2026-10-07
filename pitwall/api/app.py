@@ -32,6 +32,9 @@ Season = Annotated[int, Path(ge=1950, le=2100)]
 Round = Annotated[int, Path(ge=1, le=30)]
 SessionTypePath = Annotated[str, Path(description=f"One of {', '.join(SESSION_TYPES)}")]
 DriverCode = Annotated[str, Query(pattern=r"^[A-Za-z]{3}$", description="e.g. VER")]
+LapParam = Annotated[
+    str | None, Query(description="Lap number, or 'fastest' / omitted for the fastest lap")
+]
 
 
 def _session_type(value: str) -> str:
@@ -43,6 +46,17 @@ def _session_type(value: str) -> str:
             detail=f"session_type must be one of {', '.join(SESSION_TYPES)}, got {value!r}",
         )
     return upper
+
+
+def _lap_number(value: str | None, name: str) -> int | None:
+    """Parse a lap selector: None or "fastest" -> None, otherwise a lap number 1..255."""
+    if value is None or value.strip().lower() in ("", "fastest"):
+        return None
+    if not value.strip().isdigit() or not 1 <= int(value) <= 255:
+        raise HTTPException(
+            status_code=422, detail=f"{name} must be a lap number or 'fastest', got {value!r}"
+        )
+    return int(value)
 
 
 def create_app() -> FastAPI:
@@ -77,9 +91,7 @@ def create_app() -> FastAPI:
         "/api/sessions/{season}/{round}/{session_type}/drivers",
         response_model=list[DriverSummary],
     )
-    def drivers(
-        season: Season, round: Round, session_type: SessionTypePath
-    ) -> list[DriverSummary]:
+    def drivers(season: Season, round: Round, session_type: SessionTypePath) -> list[DriverSummary]:
         st = _session_type(session_type)
         result = queries.list_drivers(season, round, st)
         if not result:
@@ -106,8 +118,8 @@ def create_app() -> FastAPI:
         session_type: str,
         driver_a: DriverCode,
         driver_b: DriverCode,
-        lap_a: Annotated[int | None, Query(ge=1, le=255)] = None,
-        lap_b: Annotated[int | None, Query(ge=1, le=255)] = None,
+        lap_a: LapParam = None,
+        lap_b: LapParam = None,
         step_m: Annotated[float, Query(ge=0.5, le=10.0)] = 1.0,
     ) -> CompareResult:
         return coach.compare_laps(
@@ -116,8 +128,8 @@ def create_app() -> FastAPI:
             _session_type(session_type),
             driver_a,
             driver_b,
-            lap_a=lap_a,
-            lap_b=lap_b,
+            lap_a=_lap_number(lap_a, "lap_a"),
+            lap_b=_lap_number(lap_b, "lap_b"),
             step_m=step_m,
         )
 

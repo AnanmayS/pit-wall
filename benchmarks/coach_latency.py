@@ -86,17 +86,22 @@ def main() -> int:
     rows_returned: list[int] = []
     failures = 0
 
-    for i in range(args.warmup + args.iterations):
+    completed = 0
+    max_attempts = 5 * (args.warmup + args.iterations)
+    for _ in range(max_attempts):
+        if completed >= args.warmup + args.iterations:
+            break
         season, rnd, st, driver_a, driver_b, lap_a, lap_b = random_pair(rng, sessions)
-        measured = i >= args.warmup
+        measured = completed >= args.warmup
 
         start = time.perf_counter()
         try:
             compare_laps(season, rnd, st, driver_a, driver_b, lap_a, lap_b, step_m=args.step_m)
-        except (LookupError, ValueError):
-            failures += measured  # e.g. an in/out lap with too little telemetry
+        except LookupError:
+            failures += 1  # e.g. a car that stopped on the formation lap: draw another pair
             continue
         elapsed = (time.perf_counter() - start) * 1000.0
+        completed += 1
 
         start = time.perf_counter()
         frames = [
@@ -109,7 +114,9 @@ def main() -> int:
             continue
         compare_ms.append(elapsed)
         telemetry_ms.append(tel_elapsed)
-        for (driver, lap), frame in zip(((driver_a, lap_a), (driver_b, lap_b)), frames, strict=True):
+        for (driver, lap), frame in zip(
+            ((driver_a, lap_a), (driver_b, lap_b)), frames, strict=True
+        ):
             params = queries.lap_telemetry_params(season, rnd, st, driver, lap)
             summary = client.query(queries.LAP_TELEMETRY_SQL, parameters=params).summary
             rows_read.append(int(summary.get("read_rows", 0)))
@@ -123,7 +130,7 @@ def main() -> int:
     print(
         f"Telemetry Coach latency: {len(compare_ms)} comparisons (+{args.warmup} warmup) over "
         f"{n_sessions} session(s), step {args.step_m} m, seed {args.seed}"
-        + (f", {failures} skipped" if failures else "")
+        + (f"; {failures} pair(s) without usable telemetry redrawn" if failures else "")
     )
     print()
     print("| measurement | n | p50 ms | p95 ms | p99 ms | max ms |")

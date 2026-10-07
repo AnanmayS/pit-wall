@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 SESSION_TYPES = ("FP1", "FP2", "FP3", "Q", "SQ", "S", "R")
 
-InsightKind = Literal["braking", "apex", "traction", "straight", "corner"]
+InsightKind = Literal["straight", "braking", "apex", "traction", "exit", "corner"]
 
 
 class SessionInfo(BaseModel):
@@ -46,6 +46,7 @@ class LapSummary(BaseModel):
     pit_in: bool
     pit_out: bool
     track_status: str
+    position: int | None = None
 
 
 class CompareMeta(BaseModel):
@@ -103,10 +104,14 @@ class CornerComparison(BaseModel):
     apex_speed_b_kph: float
     apex_a_m: float
     apex_b_m: float
+    apex_found_a: bool = Field(description="False if A's speed minimum is on the window edge")
+    apex_found_b: bool = Field(description="False if B's speed minimum is on the window edge")
     throttle_on_a_m: float | None
     throttle_on_b_m: float | None
     max_speed_before_a_kph: float
     max_speed_before_b_kph: float
+    max_speed_after_a_kph: float = Field(description="Top speed from the apex to segment end")
+    max_speed_after_b_kph: float
     delta_ms: float = Field(description="Time lost by A in this corner's segment")
 
 

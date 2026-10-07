@@ -11,7 +11,6 @@ import pandas as pd
 
 from pitwall.telemetry import queries
 from pitwall.telemetry.align import (
-    CornerMetrics,
     Segment,
     corner_metrics,
     delta_time,
@@ -41,6 +40,7 @@ MIN_BRAKE_DIFF_M = 5.0
 MIN_APEX_DIFF_KPH = 2.0
 MIN_THROTTLE_DIFF_M = 10.0
 MIN_APPROACH_DIFF_KPH = 3.0
+MIN_EXIT_DIFF_KPH = 3.0
 KEY_SEGMENTS = 3
 
 
@@ -76,8 +76,11 @@ def compare_laps(
     tel_a = queries.get_lap_telemetry(season, round, session_type, driver_a, lap_a)
     tel_b = queries.get_lap_telemetry(season, round, session_type, driver_b, lap_b)
     for driver, lap, tel in ((driver_a, lap_a, tel_a), (driver_b, lap_b, tel_b)):
-        if len(tel) < 2:
+        if tel.empty:
             raise LapNotFoundError(f"No telemetry for {driver} lap {lap} in {where}")
+        if tel["distance_m"].nunique() < 2 or float(tel["distance_m"].max()) <= 0:
+            # e.g. a car that stopped on the formation lap
+            raise LapNotFoundError(f"No usable telemetry for {driver} lap {lap} in {where}")
 
     return build_comparison(
         tel_a,
@@ -205,13 +208,13 @@ def _compare_corners(
         before = min(BRAKE_WINDOW_M, prev_gap)
         after = min(EXIT_WINDOW_M, next_gap)
 
-        def metrics(grid: pd.DataFrame, seg: Segment = seg) -> CornerMetrics:
-            return corner_metrics(
-                grid, seg.corner_distance_m, before, after, seg.start_m, seg.end_m
-            )
-
-        ma, mb = metrics(grid_a), metrics(grid_b)
-        seg_delta = value_at(delta, "delta_ms", seg.end_m) - value_at(delta, "delta_ms", seg.start_m)
+        ma, mb = (
+            corner_metrics(grid, seg.corner_distance_m, before, after, seg.start_m, seg.end_m)
+            for grid in (grid_a, grid_b)
+        )
+        seg_delta = value_at(delta, "delta_ms", seg.end_m) - value_at(
+            delta, "delta_ms", seg.start_m
+        )
 
         segment_deltas.append(
             SegmentDelta(
@@ -239,10 +242,14 @@ def _compare_corners(
                 apex_speed_b_kph=round_to(mb.min_speed_kph, 1),
                 apex_a_m=round_to(ma.min_speed_m, 1),
                 apex_b_m=round_to(mb.min_speed_m, 1),
+                apex_found_a=ma.apex_found,
+                apex_found_b=mb.apex_found,
                 throttle_on_a_m=round_to(ma.throttle_on_m, 1),
                 throttle_on_b_m=round_to(mb.throttle_on_m, 1),
                 max_speed_before_a_kph=round_to(ma.max_speed_before_kph, 1),
                 max_speed_before_b_kph=round_to(mb.max_speed_before_kph, 1),
+                max_speed_after_a_kph=round_to(ma.max_speed_after_kph, 1),
+                max_speed_after_b_kph=round_to(mb.max_speed_after_kph, 1),
                 delta_ms=round_to(seg_delta, 1),
             )
         )
@@ -254,7 +261,8 @@ def corner_insight(c: CornerComparison, driver_a: str, driver_b: str) -> Insight
 
     Differences are stated from the faster driver's point of view. Up to three reasons are kept
     (the largest relative to their thresholds) and written in track order: approach, braking,
-    apex, exit. `kind` is the most significant reason.
+    apex, throttle application, exit speed. `kind` is the most significant reason. Apex and exit are only compared when both
+    drivers have a real apex inside the corner window.
     """
     if abs(c.delta_ms) < MIN_INSIGHT_DELTA_MS:
         return None
@@ -290,19 +298,21 @@ def corner_insight(c: CornerComparison, driver_a: str, driver_b: str) -> Insight
                 f"brakes {metres} m later",
             )
         )
+    both_apexes = c.apex_found_a and c.apex_found_b
     apex_fast, apex_slow = pick(c.apex_speed_a_kph, c.apex_speed_b_kph)
-    kph = round(apex_fast - apex_slow)
-    reasons.append(
-        (
-            "apex",
-            apex_fast - apex_slow,
-            MIN_APEX_DIFF_KPH,
-            f"carries {kph} km/h more than {slow} through {c.name}",
-            f"carries {kph} km/h more through the apex",
+    if both_apexes:
+        kph = round(apex_fast - apex_slow)
+        reasons.append(
+            (
+                "apex",
+                apex_fast - apex_slow,
+                MIN_APEX_DIFF_KPH,
+                f"carries {kph} km/h more than {slow} through {c.name}",
+                f"carries {kph} km/h more through the apex",
+            )
         )
-    )
     on_fast, on_slow = pick(c.throttle_on_a_m, c.throttle_on_b_m)
-    if on_fast is not None and on_slow is not None:
+    if both_apexes and on_fast is not None and on_slow is not None:
         metres = round(on_slow - on_fast)
         reasons.append(
             (
@@ -313,6 +323,18 @@ def corner_insight(c: CornerComparison, driver_a: str, driver_b: str) -> Insight
                 f"gets back on full throttle {metres} m earlier on exit",
             )
         )
+
+    exit_fast, exit_slow = pick(c.max_speed_after_a_kph, c.max_speed_after_b_kph)
+    kph = round(exit_fast - exit_slow)
+    reasons.append(
+        (
+            "exit",
+            exit_fast - exit_slow,
+            MIN_EXIT_DIFF_KPH,
+            f"is {kph} km/h quicker than {slow} out of {c.name}",
+            f"is {kph} km/h quicker on the exit",
+        )
+    )
 
     track_order = [r[0] for r in reasons]
     significant = [r for r in reasons if r[1] >= r[2]]
@@ -331,9 +353,7 @@ def corner_insight(c: CornerComparison, driver_a: str, driver_b: str) -> Insight
             body = ", ".join(clauses[:-1]) + " and " + clauses[-1]
         text = f"{fast} {body}, worth {worth} s"
         kind = strongest[0][0]
-    return Insight(
-        text=text, corner=c.name, delta_ms=c.delta_ms, kind=kind, faster_driver=fast
-    )
+    return Insight(text=text, corner=c.name, delta_ms=c.delta_ms, kind=kind, faster_driver=fast)
 
 
 def key_segments(
