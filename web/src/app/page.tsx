@@ -22,8 +22,8 @@ const CARDS = [
   {
     href: "/odds",
     title: "Odds",
-    body: "Simulation-based probabilities for wins, podiums, and points.",
-    status: "Milestone 3",
+    body: "Title and next-race probabilities from simulating the rest of the season.",
+    status: "Live",
   },
 ];
 

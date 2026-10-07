@@ -5,6 +5,9 @@ import type {
   CompareResult,
   DriverSummary,
   LapSummary,
+  OddsHistory,
+  OddsKind,
+  OddsLatest,
   RecentScenario,
   ScenarioResult,
   ScenarioSpec,
@@ -149,6 +152,9 @@ export const paths = {
       lap_a: String(p.lap_a),
       lap_b: String(p.lap_b),
     })}`,
+  oddsLatest: (season: number) => `/api/odds/latest?${new URLSearchParams({ season: String(season) })}`,
+  oddsHistory: (season: number, kind: OddsKind, top = 6) =>
+    `/api/odds/history?${new URLSearchParams({ season: String(season), kind, top: String(top) })}`,
   whatif: (id: string) => `/api/whatif/${encodeURIComponent(id)}`,
   whatifRecent: (season: number, round: number) =>
     `/api/whatif/recent?${new URLSearchParams({ season: String(season), round: String(round) })}`,
@@ -221,4 +227,12 @@ export function toApiError(err: unknown, path: string): ApiError {
   return err instanceof ApiError
     ? err
     : new ApiError(err instanceof Error ? err.message : String(err), apiUrl(path), null);
+}
+
+export function getOddsLatest(season: number, signal?: AbortSignal) {
+  return fetchJson<OddsLatest>(paths.oddsLatest(season), { signal });
+}
+
+export function getOddsHistory(season: number, kind: OddsKind, top = 6, signal?: AbortSignal) {
+  return fetchJson<OddsHistory>(paths.oddsHistory(season, kind, top), { signal });
 }

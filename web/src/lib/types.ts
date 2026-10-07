@@ -191,6 +191,7 @@ export interface ScenarioResult {
   cache_hit: boolean;
   views: number;
   created_at: string;
+  /** The full spec; older stored results may still return null. */
   spec: ScenarioSpec | null;
   season: number;
   round: number;
@@ -246,4 +247,50 @@ export interface AskResponse {
   latency_ms: number;
   stop_reason: string | null;
   model: string;
+}
+
+// ---------------------------------------------------------------------------
+// Championship odds
+// ---------------------------------------------------------------------------
+
+export type OddsKind = "title" | "constructors" | "race_win";
+
+export interface OddsEntry {
+  driver: string | null;
+  team: string | null;
+  /** Set for race_win (the next round) and the conditional lists. */
+  round: number | null;
+  probability: number;
+}
+
+/** GET /api/odds/latest?season= ; every list is sorted by probability desc and may be absent. */
+export interface OddsLatest {
+  season: number;
+  as_of: string;
+  after_round: number;
+  model_version: string;
+  n_sims: number;
+  title?: OddsEntry[];
+  constructors?: OddsEntry[];
+  race_win?: OddsEntry[];
+  /** P(title) given the driver wins the next race. */
+  title_if_next_win?: OddsEntry[];
+  /** P(title) given the driver does not win the next race. */
+  title_if_next_not_win?: OddsEntry[];
+}
+
+/** One snapshot in GET /api/odds/history; series values are keyed by series name. */
+export interface OddsHistoryPoint {
+  as_of: string;
+  after_round: number;
+  [series: string]: number | string | null;
+}
+
+/** GET /api/odds/history?season=&kind=&top= */
+export interface OddsHistory {
+  season: number;
+  kind: OddsKind;
+  series: string[];
+  /** Ordered by as_of ascending. */
+  points: OddsHistoryPoint[];
 }

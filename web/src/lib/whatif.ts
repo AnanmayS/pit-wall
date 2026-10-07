@@ -116,22 +116,4 @@ export function describeSpec(spec: ScenarioSpec): string[] {
   return spec.changes.map(describeChange);
 }
 
-/** 0.123 -> "12.3%"; tiny non-zero values show as "<0.1%". */
-export function formatPct(p: number | null | undefined, digits = 1): string {
-  if (p == null || !Number.isFinite(p)) return "-";
-  const pct = p * 100;
-  const floor = 10 ** -digits;
-  if (pct > 0 && pct < floor) return `<${floor.toFixed(digits)}%`;
-  return `${pct.toFixed(digits)}%`;
-}
-
-export function formatTimestamp(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+export { formatPct, formatTimestamp } from "./format";

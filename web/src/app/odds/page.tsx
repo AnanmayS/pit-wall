@@ -1,14 +1,8 @@
 import type { Metadata } from "next";
-import { Placeholder } from "@/components/Placeholder";
+import OddsClient from "@/components/odds/OddsClient";
 
-export const metadata: Metadata = { title: "Odds" };
+export const metadata: Metadata = { title: "Title Odds" };
 
 export default function OddsPage() {
-  return (
-    <Placeholder
-      title="Race Odds"
-      milestone={3}
-      blurb="Simulation-driven win, podium, and points probabilities for upcoming sessions."
-    />
-  );
+  return <OddsClient />;
 }

@@ -15,7 +15,7 @@ export default function ScenarioDetailClient({ id }: { id: string }) {
   const scenario = useApi<ScenarioResult>(paths.whatif(id), nonce, WHATIF_TIMEOUT_MS);
   const result = scenario.data;
 
-  // Event name for the header, and the spec when the result does not carry it.
+  // Event name for the header; /recent is only a fallback for older results stored without a spec.
   const sessions = useApi<SessionSummary[]>(result ? paths.sessions(result.season) : null);
   const recent = useApi<RecentScenario[]>(
     result && !result.spec ? paths.whatifRecent(result.season, result.round) : null,
