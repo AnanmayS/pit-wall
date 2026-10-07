@@ -26,23 +26,30 @@ def get_client(database: str | None = None) -> Client:
     )
 
 
-def iter_statements(sql: str):
-    """Split a DDL file into statements. Statements end with ';' on their own line.
+def _strip_leading_comments(stmt: str) -> str:
+    lines = stmt.strip().splitlines()
+    while lines and (not lines[0].strip() or lines[0].strip().startswith("--")):
+        lines.pop(0)
+    return "\n".join(lines).strip()
 
-    Comments ("-- ...") are kept inside statements because ClickHouse accepts them.
+
+def iter_statements(sql: str):
+    """Split a DDL file into statements. A statement ends with ';' at the end of a line.
+
+    Leading comment lines are stripped; inline comments inside a statement are kept
+    (ClickHouse accepts them). Comment-only blocks are skipped.
     """
     buf: list[str] = []
     for line in sql.splitlines():
         buf.append(line)
         if line.strip().endswith(";"):
-            stmt = "\n".join(buf).strip().rstrip(";").strip()
+            stmt = _strip_leading_comments("\n".join(buf)).rstrip(";").strip()
             buf = []
-            # skip comment-only blocks
-            if any(not ln.strip().startswith("--") and ln.strip() for ln in stmt.splitlines()):
+            if stmt:
                 yield stmt
-    tail = "\n".join(buf).strip()
-    if tail and any(not ln.strip().startswith("--") and ln.strip() for ln in tail.splitlines()):
-        yield tail.rstrip(";")
+    tail = _strip_leading_comments("\n".join(buf)).rstrip(";").strip()
+    if tail:
+        yield tail
 
 
 def migrate(client: Client | None = None) -> list[str]:
