@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
+import pandas as pd
 from clickhouse_connect.driver.exceptions import ClickHouseError
 from fastapi import FastAPI, HTTPException, Path, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -187,7 +188,7 @@ def create_app() -> FastAPI:
                 {
                     "driver": r.driver or None,
                     "team": r.team or None,
-                    "round": None if r.round != r.round else int(r.round),
+                    "round": None if pd.isna(r.round) else int(r.round),
                     "probability": float(r.probability),
                 }
                 for r in g.itertuples()
