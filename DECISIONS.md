@@ -96,3 +96,14 @@ measures, so these gaps are visible rather than hidden.
 ## D20. Share links carry the scenario spec
 `POST /api/whatif` and `GET /api/whatif/{id}` return the canonical spec so a share page can render
 the scenario sentences without a second lookup.
+
+## D21. Polymarket data handling (2026-10-06)
+- Price history is fetched backwards in 14-day windows: the CLOB endpoint rejects longer
+  `startTs`/`endTs` spans and `interval=max` returns nothing for closed markets.
+- Race-winner events are mapped to rounds by date first (within 8 days of the race) and name second,
+  because slugs are inconsistent (typos, no year before 2026, "Italy" meaning Imola in May).
+- Placeholder markets ("Driver A".."J") and the "Other" outcome are stored but excluded from scoring;
+  implied probabilities are the Yes prices normalised to sum to 1 across the event's drivers.
+- Market probability is sampled at a stated number of hours before the race start. One hour before,
+  the market already knows the grid and our model does not (no qualifying model, D19), so RESULTS
+  reports both a 1 h and a 48 h (pre-qualifying) comparison rather than picking the flattering one.

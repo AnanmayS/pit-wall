@@ -196,3 +196,83 @@ def markets_cmd(
             f"  {fav_s:<14}{won or ('-' if all_closed else 'open'):<8}"
         )
     typer.echo(f"{len(rows)} events")
+
+
+@odds_app.command("forecast")
+def forecast_cmd(
+    season: int = typer.Option(2026, help="Season to forecast"),
+    after_round: int | None = typer.Option(None, help="Default: latest ingested race round"),
+    sims: int = typer.Option(20_000, help="Season simulations"),
+    store: bool = typer.Option(True, help="Write rows to the forecasts table"),
+    verbose: bool = typer.Option(False, "-v"),
+) -> None:
+    """Season Monte Carlo: title, constructors and next-race-win probabilities."""
+    from pitwall.db.clickhouse import get_client
+    from pitwall.odds.season import simulate_season, store_forecast
+
+    _logging(verbose)
+    client = get_client()
+    if after_round is None:
+        row = client.query(
+            "SELECT max(round) FROM sessions FINAL WHERE season={s:UInt16} AND session_type='R'",
+            parameters={"s": season},
+        ).result_rows
+        after_round = int(row[0][0]) if row and row[0][0] else 0
+    fc = simulate_season(season, after_round, n_sims=sims, client=client)
+    typer.echo(
+        f"{season} after round {after_round}: {len(fc.remaining_rounds)} rounds left, {fc.n_sims:,} sims in {fc.compute_s:.1f}s"
+    )
+    typer.echo("Title: " + ", ".join(f"{d} {p:.1%}" for d, p in list(fc.p_title.items())[:6]))
+    typer.echo(
+        "Constructors: " + ", ".join(f"{t} {p:.1%}" for t, p in list(fc.p_constructors.items())[:4])
+    )
+    typer.echo(
+        "Next race win: " + ", ".join(f"{d} {p:.1%}" for d, p in list(fc.p_next_win.items())[:6])
+    )
+    for c in fc.conditionals:
+        typer.echo(f"  {c['driver']} {c['kind']}: {c['probability']:.1%} (n={c['n']})")
+    if store:
+        n = store_forecast(fc, client)
+        typer.echo(f"stored {n} forecast rows")
+
+
+@odds_app.command("history")
+def history_cmd(season: int = typer.Option(2026), kind: str = typer.Option("title")) -> None:
+    """Show how stored forecasts moved after each round."""
+    from pitwall.db.clickhouse import get_client
+
+    df = get_client().query_df(
+        "SELECT as_of, after_round, driver, team, probability FROM forecasts FINAL "
+        "WHERE season={s:UInt16} AND kind={k:String} ORDER BY as_of, probability DESC",
+        parameters={"s": season, "k": kind},
+    )
+    if df.empty:
+        typer.echo("no forecasts stored")
+        raise typer.Exit(1)
+    for as_of, g in df.groupby("as_of", sort=True):
+        key = "team" if kind == "constructors" else "driver"
+        top = ", ".join(f"{r[key]} {r['probability']:.1%}" for _, r in g.head(5).iterrows())
+        typer.echo(f"{as_of} after R{int(g['after_round'].iloc[0])}: {top}")
+
+
+@odds_app.command("score")
+def score_cmd(
+    season: int = typer.Option(2025),
+    rounds: str = typer.Option("", help="comma-separated; default all"),
+    sims: int = typer.Option(5000),
+    hours_before: float = typer.Option(
+        1.0, help="Market price taken this many hours before the race start"
+    ),
+    json_out: str = typer.Option("", help="Write per-race rows to this JSON file"),
+) -> None:
+    """Backtest our pre-race win probabilities against Polymarket (Brier score)."""
+    from pitwall.odds.score import backtest_season, dump_json, markdown_summary
+
+    rs = [int(x) for x in rounds.split(",") if x.strip()] or None
+    scores, notes = backtest_season(season, rs, n_sims=sims, hours_before=hours_before)
+    cmd = (
+        f"`uv run pitwall odds score --season {season} --sims {sims} --hours-before {hours_before}`"
+    )
+    typer.echo(markdown_summary(scores, notes, cmd))
+    if json_out:
+        dump_json(scores, json_out)
