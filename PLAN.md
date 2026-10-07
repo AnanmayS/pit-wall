@@ -224,13 +224,13 @@ accuracy (tool name + args match), tool-call count, latency, cost.
 
 ## 8. Milestones
 
-### M1 — Ingestion + ClickHouse + Telemetry Coach  🔨
+### M1 — Ingestion + ClickHouse + Telemetry Coach  🔨 (code done; full-season ingest + benchmarks running)
 Done means: `pitwall ingest season 2025` has loaded all 60 R/Q/S/SQ sessions; `pitwall ingest status`
 shows every session; `/coach` compares any two laps of any ingested session end-to-end; CI green
 (unit + integration + web build). Metrics produced: rows ingested per table, ingestion wall time per
 season, telemetry compression ratio, compare query latency p50/p95/p99 (`benchmarks/coach_latency.py`).
 
-### M2 — Simulator + What If + DynamoDB + AI  ⬜
+### M2 — Simulator + What If + DynamoDB + AI  🔨 (engine, fit, counterfactual, cache, API, web, AI loop + eval set done; live eval needs an API key)
 Done means: `pitwall sim fit 2025` writes a parameter file with sample sizes; `pitwall sim backtest
 2025` reports accuracy on all 24 races; `/what-if` page runs a scenario, shows the distribution and a
 share link; second open of a link is a DynamoDB cache hit; `/api/ask` answers questions through tools
@@ -238,7 +238,7 @@ with the grounding check; eval runner reports grounding rate and parse accuracy.
 wall time per 10k-run scenario, cache hit rate under a replayed access log, p99 API latency (cold vs
 cached), backtest metrics on 24 races, grounding rate, parse accuracy.
 
-### M3 — Title Odds + Polymarket  ⬜
+### M3 — Title Odds + Polymarket  🔨 (season Monte Carlo + odds API done; Polymarket ingestion/scoring in progress)
 Done means: forecast job runs after each 2026 session and stores results; Polymarket prices ingested
 hourly; `/odds` page charts our odds vs market over time; Brier score vs Polymarket over N races
 (backtest + live). Metrics: Brier (ours vs market), N races scored.

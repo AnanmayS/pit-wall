@@ -83,3 +83,16 @@ rewrite before refusing. The runner hides the history; the manual loop is ~60 li
 ## D18. What If cold vs cached is served by the same endpoint
 `POST /api/whatif` computes on a miss and returns `cache_hit` either way, so hit rate can be measured
 from logs under a replayed access pattern rather than claimed.
+
+## D19. Season forecast = per-race engine in forecast mode with recent-form pace priors (2026-10-06)
+Each completed race is fitted (D16) and every driver's pace relative to the field median is averaged
+with an exponential half-life of 3 races (wet races down-weighted ×0.3). Future races draw a race-level
+pace offset from that driver's observed race-to-race spread and run the same engine with generic
+strategies and track defaults, so one model serves What If and Title Odds. Known gaps, all labelled in
+the forecast's `assumptions`: no qualifying model (grid = drawn pace order), no in-season development
+trend, no track-specific parameters for future rounds. Calibration is what the Polymarket comparison
+measures, so these gaps are visible rather than hidden.
+
+## D20. Share links carry the scenario spec
+`POST /api/whatif` and `GET /api/whatif/{id}` return the canonical spec so a share page can render
+the scenario sentences without a second lookup.
