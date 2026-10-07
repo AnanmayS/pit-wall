@@ -113,3 +113,9 @@ The F1 timing API behind FastF1 allows ~500 calls/hour. A full season with telem
 and the first pass stopped at 45 after about 21 minutes. Ingestion is therefore idempotent and
 resumable (`ingest season` skips sessions already present; `scripts/finish_ingest.sh` retries on a
 20-minute cadence) rather than parallel. Re-ingesting from the on-disk FastF1 cache makes no API calls.
+
+## D23. Session time zero without telemetry (2026-10-07)
+FastF1 computes `t0_date` only when car data is loaded, so a laps-only ingest (used for the live 2026
+season, where telemetry is not needed for Title Odds) failed on every session. t0 is now derived from
+any lap's absolute `LapStartDate` minus its session-relative `LapStartTime`, which matches FastF1's
+value; `session.date` is the last-resort fallback.

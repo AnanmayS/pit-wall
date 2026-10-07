@@ -224,13 +224,13 @@ accuracy (tool name + args match), tool-call count, latency, cost.
 
 ## 8. Milestones
 
-### M1 — Ingestion + ClickHouse + Telemetry Coach  🔨 (code done; full-season ingest + benchmarks running)
+### M1 — Ingestion + ClickHouse + Telemetry Coach  ✅ (60/60 2025 sessions, 32.4 M telemetry rows; numbers in RESULTS.md)
 Done means: `pitwall ingest season 2025` has loaded all 60 R/Q/S/SQ sessions; `pitwall ingest status`
 shows every session; `/coach` compares any two laps of any ingested session end-to-end; CI green
 (unit + integration + web build). Metrics produced: rows ingested per table, ingestion wall time per
 season, telemetry compression ratio, compare query latency p50/p95/p99 (`benchmarks/coach_latency.py`).
 
-### M2 — Simulator + What If + DynamoDB + AI  🔨 (engine, fit, counterfactual, cache, API, web, AI loop + eval set done; live eval needs an API key)
+### M2 — Simulator + What If + DynamoDB + AI  🔨 (everything built and benchmarked; the live AI eval is the one open item and needs an API key)
 Done means: `pitwall sim fit 2025` writes a parameter file with sample sizes; `pitwall sim backtest
 2025` reports accuracy on all 24 races; `/what-if` page runs a scenario, shows the distribution and a
 share link; second open of a link is a DynamoDB cache hit; `/api/ask` answers questions through tools
