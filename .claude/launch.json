@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "python", "-m", "pitwall.api"],
+      "port": 8080
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "web", "dev"],
+      "port": 3000
+    }
+  ]
+}

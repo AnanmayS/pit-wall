@@ -107,3 +107,9 @@ the scenario sentences without a second lookup.
 - Market probability is sampled at a stated number of hours before the race start. One hour before,
   the market already knows the grid and our model does not (no qualifying model, D19), so RESULTS
   reports both a 1 h and a 48 h (pre-qualifying) comparison rather than picking the flattering one.
+
+## D22. FastF1 rate limit shapes the ingest design (2026-10-06)
+The F1 timing API behind FastF1 allows ~500 calls/hour. A full season with telemetry is ~60 sessions
+and the first pass stopped at 45 after about 21 minutes. Ingestion is therefore idempotent and
+resumable (`ingest season` skips sessions already present; `scripts/finish_ingest.sh` retries on a
+20-minute cadence) rather than parallel. Re-ingesting from the on-disk FastF1 cache makes no API calls.
