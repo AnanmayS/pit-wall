@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
-import { buildChartRows, contiguousZones } from "@/lib/chart";
+import { useMemo, useState } from "react";
+import { buildChartRows, contiguousZones, nearestRow } from "@/lib/chart";
 import { formatDelta, formatLapTime } from "@/lib/format";
 import { SESSION_TYPES, type CompareResult } from "@/lib/types";
 import { CornerTable } from "./CornerTable";
 import { DeltaChart } from "./DeltaChart";
 import { InsightList } from "./InsightList";
 import { SpeedChart } from "./SpeedChart";
+import { TrackMap } from "./TrackMap";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -19,10 +20,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export function CompareView({ result }: { result: CompareResult }) {
-  const { meta, grid, corners, insights, total_delta_ms } = result;
+  const { meta, grid, corners, insights, total_delta_ms, track } = result;
   const rows = useMemo(() => buildChartRows(grid), [grid]);
   const brakeZonesA = useMemo(() => contiguousZones(grid.distance_m ?? [], grid.brake_a ?? []), [grid]);
   const brakeZonesB = useMemo(() => contiguousZones(grid.distance_m ?? [], grid.brake_b ?? []), [grid]);
+  // Distance hovered on the track map, mirrored as a dot on the gap chart.
+  const [hoverDistance, setHoverDistance] = useState<number | null>(null);
+  const highlight = useMemo(
+    () => (hoverDistance == null ? null : nearestRow(rows, hoverDistance)),
+    [rows, hoverDistance],
+  );
 
   const sessionLabel =
     SESSION_TYPES.find((s) => s.value === meta.session_type)?.label ?? meta.session_type;
@@ -37,6 +44,21 @@ export function CompareView({ result }: { result: CompareResult }) {
         : `${b} faster by ${absDelta}`;
   const headlineTone =
     Math.abs(total_delta_ms) < 0.5 ? "" : total_delta_ms < 0 ? "text-driver-a" : "text-driver-b";
+
+  // Hovering the map re-renders this view on every frame; keep the speed chart out of that.
+  const speedChart = useMemo(
+    () => (
+      <SpeedChart
+        rows={rows}
+        lapLength={meta.lap_length_m}
+        driverA={a}
+        driverB={b}
+        brakeZonesA={brakeZonesA}
+        brakeZonesB={brakeZonesB}
+      />
+    ),
+    [rows, meta.lap_length_m, a, b, brakeZonesA, brakeZonesB],
+  );
 
   return (
     <div className="space-y-8">
@@ -58,6 +80,15 @@ export function CompareView({ result }: { result: CompareResult }) {
         </div>
       </div>
 
+      <TrackMap
+        track={track}
+        grid={grid}
+        corners={corners}
+        driverA={a}
+        driverB={b}
+        onHoverDistance={setHoverDistance}
+      />
+
       <div className="space-y-6 rounded-xl border border-border bg-surface p-4">
         <DeltaChart
           rows={rows}
@@ -65,15 +96,9 @@ export function CompareView({ result }: { result: CompareResult }) {
           lapLength={meta.lap_length_m}
           driverA={a}
           driverB={b}
+          highlight={highlight}
         />
-        <SpeedChart
-          rows={rows}
-          lapLength={meta.lap_length_m}
-          driverA={a}
-          driverB={b}
-          brakeZonesA={brakeZonesA}
-          brakeZonesB={brakeZonesB}
-        />
+        {speedChart}
       </div>
 
       <Section title="Insights">

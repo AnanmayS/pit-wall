@@ -35,6 +35,19 @@ function rowAt(grid: CompareGrid, i: number): ChartRow {
   };
 }
 
+/** Row closest to distance `d` (rows sorted by distance), or null when there are none. */
+export function nearestRow(rows: ChartRow[], d: number): ChartRow | null {
+  if (rows.length === 0 || !Number.isFinite(d)) return null;
+  let lo = 0;
+  let hi = rows.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (rows[mid].d <= d) lo = mid;
+    else hi = mid;
+  }
+  return Math.abs(rows[hi].d - d) < Math.abs(rows[lo].d - d) ? rows[hi] : rows[lo];
+}
+
 /** Contiguous distance ranges where `flags` is true. */
 export function contiguousZones(distance: number[], flags: boolean[]): Zone[] {
   const zones: Zone[] = [];

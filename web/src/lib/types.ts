@@ -86,6 +86,9 @@ export interface CompareCorner {
   brake_point_a_m: number | null;
   brake_point_b_m: number | null;
   brake_delta_m: number | null;
+  /** Distance of each driver's minimum-speed point; null when no apex was found. */
+  apex_a_m?: number | null;
+  apex_b_m?: number | null;
   apex_speed_a_kph: number | null;
   apex_speed_b_kph: number | null;
   throttle_on_a_m: number | null;
@@ -100,6 +103,26 @@ export interface CompareInsight {
   kind: string;
 }
 
+export interface TrackCorner {
+  name: string;
+  distance_m: number;
+  /** Raw FastF1 position units (1/10 m), same frame as CompareTrack.x/y. */
+  x: number;
+  y: number;
+}
+
+/**
+ * Driver A's path around the lap, index-aligned with `grid.distance_m` / `grid.delta_ms`.
+ * Raw FastF1 position units (1/10 m), not rotated: rotate by `rotation_deg`
+ * (x' = x cos r - y sin r, y' = x sin r + y cos r) and flip y for screen coordinates.
+ */
+export interface CompareTrack {
+  x: number[];
+  y: number[];
+  rotation_deg: number;
+  corners: TrackCorner[];
+}
+
 /** GET /api/compare */
 export interface CompareResult {
   meta: CompareMeta;
@@ -109,6 +132,8 @@ export interface CompareResult {
   segments: CompareSegment[];
   corners: CompareCorner[];
   insights: CompareInsight[];
+  /** Absent from older API builds; the track map is hidden when missing or unusable. */
+  track?: CompareTrack | null;
 }
 
 export interface CompareParams {

@@ -4,6 +4,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -20,12 +21,15 @@ export function DeltaChart({
   lapLength,
   driverA,
   driverB,
+  highlight,
 }: {
   rows: ChartRow[];
   corners: CompareCorner[];
   lapLength: number;
   driverA: string;
   driverB: string;
+  /** Point to mark, e.g. the distance hovered on the track map. */
+  highlight?: ChartRow | null;
 }) {
   return (
     <div>
@@ -65,6 +69,19 @@ export function DeltaChart({
               />
             ))}
             <ReferenceLine y={0} stroke={COLORS.zero} />
+            {highlight && (
+              <ReferenceLine x={highlight.d} stroke={COLORS.delta} strokeOpacity={0.35} />
+            )}
+            {highlight && (
+              <ReferenceDot
+                x={highlight.d}
+                y={highlight.delta}
+                r={4}
+                fill={COLORS.delta}
+                stroke="#13161b"
+                strokeWidth={1.5}
+              />
+            )}
             <Tooltip
               {...tooltipStyle}
               labelFormatter={formatMeters}
