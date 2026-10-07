@@ -1,0 +1,37 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# data & caches (FastF1 cache can be many GB)
+data/
+!data/.gitkeep
+.fastf1-cache/
+*.parquet
+*.duckdb
+
+# node
+web/node_modules/
+web/.next/
+web/out/
+
+# terraform
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.backup
+infra/**/.terraform.lock.hcl
+
+# misc
+.DS_Store
+*.log

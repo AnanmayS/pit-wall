@@ -1,0 +1,35 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    container_name: pitwall-clickhouse
+    ports:
+      - "8123:8123"   # HTTP (clickhouse-connect)
+      - "9000:9000"   # native
+    environment:
+      CLICKHOUSE_USER: pitwall
+      CLICKHOUSE_PASSWORD: pitwall
+      CLICKHOUSE_DB: pitwall
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    container_name: pitwall-dynamodb
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/home/dynamodblocal/data"]
+    ports:
+      - "8000:8000"
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    user: root
+
+volumes:
+  clickhouse-data:
+  dynamodb-data:

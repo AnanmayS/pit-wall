@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:25.8
+        ports: ["8123:8123"]
+        env:
+          CLICKHOUSE_USER: pitwall
+          CLICKHOUSE_PASSWORD: pitwall
+          CLICKHOUSE_DB: pitwall
+        options: >-
+          --health-cmd "wget --spider -q http://localhost:8123/ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+      dynamodb:
+        image: amazon/dynamodb-local:latest
+        ports: ["8000:8000"]
+    env:
+      CLICKHOUSE_HOST: localhost
+      CLICKHOUSE_USER: pitwall
+      CLICKHOUSE_PASSWORD: pitwall
+      CLICKHOUSE_DATABASE: pitwall
+      DYNAMODB_ENDPOINT_URL: http://localhost:8000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --extra dev
+      - name: lint
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: unit tests
+        run: uv run pytest -q
+      - name: integration tests (ClickHouse + DynamoDB Local)
+        run: uv run pytest -q -m integration
+
+  web:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: web/pnpm-lock.yaml }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm build
