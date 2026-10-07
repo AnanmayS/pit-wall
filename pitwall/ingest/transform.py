@@ -610,6 +610,27 @@ def sessions_frame(
 # --------------------------------------------------------------------------- orchestration
 
 
+def _t0_date(session, laps: pd.DataFrame):
+    """Absolute timestamp of session time zero.
+
+    FastF1 only computes `session.t0_date` when car data is loaded. Without telemetry it is derived
+    from any lap that has both an absolute (`LapStartDate`) and a session-relative (`LapStartTime`)
+    start, which agree with FastF1's own value to the millisecond.
+    """
+    try:
+        t0 = session.t0_date
+        if t0 is not None and not pd.isna(t0):
+            return t0
+    except Exception:  # noqa: BLE001 - fastf1 raises DataNotLoadedError here
+        pass
+    if "LapStartDate" in laps and "LapStartTime" in laps:
+        both = laps.dropna(subset=["LapStartDate", "LapStartTime"])
+        if not both.empty:
+            row = both.iloc[0]
+            return pd.Timestamp(row["LapStartDate"]) - pd.Timedelta(row["LapStartTime"])
+    return pd.Timestamp(session.date)
+
+
 def transform_session(
     session: Any,
     season: int,
@@ -654,7 +675,7 @@ def transform_session(
         "weather": weather_frame(session.weather_data, season, round, session_type),
         "track_status": track_status_frame(session.track_status, season, round, session_type),
         "race_control": race_control_frame(
-            session.race_control_messages, session.t0_date, season, round, session_type
+            session.race_control_messages, _t0_date(session, laps), season, round, session_type
         ),
         "results": results_frame(session.results, season, round, session_type),
         "circuit_corners": corners_frame(corners, season, round),
