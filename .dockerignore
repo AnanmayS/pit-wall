@@ -1,0 +1,10 @@
+.venv
+data
+web
+.git
+.github
+infra
+benchmarks
+tests
+*.md
+!README.md

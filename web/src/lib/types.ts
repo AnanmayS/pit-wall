@@ -120,3 +120,130 @@ export interface CompareParams {
   lap_a: LapSelector;
   lap_b: LapSelector;
 }
+
+// ---------------------------------------------------------------------------
+// What-If simulator
+// ---------------------------------------------------------------------------
+
+export type ChangeType =
+  | "pit_lap"
+  | "compound"
+  | "skip_stop"
+  | "extra_stop"
+  | "no_safety_car"
+  | "safety_car"
+  | "dnf";
+
+export type Compound = "SOFT" | "MEDIUM" | "HARD" | "INTERMEDIATE" | "WET";
+
+export const COMPOUNDS: Compound[] = ["SOFT", "MEDIUM", "HARD", "INTERMEDIATE", "WET"];
+
+/** One modification to the actual race. Which fields are required depends on `type`. */
+export interface Change {
+  type: ChangeType;
+  /** 3-letter driver code. */
+  driver?: string | null;
+  lap?: number | null;
+  /** 1-based index among the driver's remaining stops. */
+  stop?: number | null;
+  compound?: Compound | null;
+}
+
+/** Body of POST /api/whatif. */
+export interface ScenarioSpec {
+  season: number;
+  round: number;
+  changes: Change[];
+  branch_lap?: number | null;
+  /** 100..100000, server default 10000. */
+  n_runs?: number;
+}
+
+export interface DriverOutcome {
+  driver: string;
+  p_win: number;
+  p_podium: number;
+  p_points: number;
+  p_dnf: number;
+  expected_position: number;
+  /** Index 0 = P1. */
+  position_probs: number[];
+}
+
+export interface ChangedDriverOutcome {
+  driver: string;
+  actual_position: number | null;
+  expected_position: number;
+  p_better_than_actual: number | null;
+  p_worse_than_actual: number | null;
+  position_probs: number[];
+}
+
+export interface ScenarioFit {
+  clean_laps: number;
+  pit_stops_used: number;
+  sc_deployments: number;
+}
+
+/** Response of POST /api/whatif and GET /api/whatif/{id}. */
+export interface ScenarioResult {
+  id: string;
+  cache_hit: boolean;
+  views: number;
+  created_at: string;
+  spec: ScenarioSpec | null;
+  season: number;
+  round: number;
+  branch_lap: number;
+  n_runs: number;
+  compute_ms: number;
+  /** Sorted by expected_position. */
+  summary: DriverOutcome[];
+  changed_drivers: ChangedDriverOutcome[];
+  /** Labelled fallbacks the model fit had to use. */
+  assumptions: Record<string, string>;
+  fit: ScenarioFit;
+}
+
+/** GET /api/whatif/recent?season&round */
+export interface RecentScenario {
+  id: string;
+  created_at: string;
+  spec: ScenarioSpec;
+}
+
+// ---------------------------------------------------------------------------
+// Ask the Pit Wall
+// ---------------------------------------------------------------------------
+
+export type AskEffort = "low" | "medium" | "high";
+
+export interface AskRequest {
+  question: string;
+  effort?: AskEffort;
+}
+
+export interface AskToolCall {
+  name: string;
+  input: Record<string, unknown>;
+  is_error: boolean;
+  ms: number;
+}
+
+/** Response of POST /api/ask. */
+export interface AskResponse {
+  question: string;
+  answer: string;
+  grounded: boolean;
+  refused: boolean;
+  /** Claims in the answer that could not be matched to tool output. */
+  unmatched: string[];
+  tool_calls: AskToolCall[];
+  rewrites: number;
+  turns: number;
+  input_tokens: number;
+  output_tokens: number;
+  latency_ms: number;
+  stop_reason: string | null;
+  model: string;
+}

@@ -20,6 +20,7 @@ class WhatIfResponse:
     views: int
     created_at: str
     result: dict
+    spec: ScenarioSpec | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -27,7 +28,7 @@ class WhatIfResponse:
             "cache_hit": self.cache_hit,
             "views": self.views,
             "created_at": self.created_at,
-            "spec": None,
+            "spec": self.spec.model_dump(mode="json") if self.spec else None,
             **self.result,
         }
 
@@ -40,7 +41,7 @@ def run_or_cached(spec: ScenarioSpec, *, use_cache: bool = True) -> WhatIfRespon
         cached = store.get_scenario(sid, spec.model_version)
         if cached is not None and cached.result is not None:
             log.info("whatif %s: cache hit (views=%d)", sid, cached.views)
-            return WhatIfResponse(sid, True, cached.views, cached.created_at, cached.result)
+            return WhatIfResponse(sid, True, cached.views, cached.created_at, cached.result, spec)
     outcome = run_scenario(spec, scenario_id=sid)
     result = outcome.to_dict()
     if use_cache:
@@ -49,7 +50,7 @@ def run_or_cached(spec: ScenarioSpec, *, use_cache: bool = True) -> WhatIfRespon
         return WhatIfResponse(
             sid, False, meta.views if meta else 0, meta.created_at if meta else "", result
         )
-    return WhatIfResponse(sid, False, 0, "", result)
+    return WhatIfResponse(sid, False, 0, "", result, spec)
 
 
 def open_shared(sid: str, model_version: str = "sim-v1") -> WhatIfResponse | None:
@@ -61,5 +62,5 @@ def open_shared(sid: str, model_version: str = "sim-v1") -> WhatIfResponse | Non
         outcome = run_scenario(cached.spec, scenario_id=sid)
         result = outcome.to_dict()
         store.put_result(sid, model_version, result, outcome.compute_ms)
-        return WhatIfResponse(sid, False, cached.views, cached.created_at, result)
-    return WhatIfResponse(sid, True, cached.views, cached.created_at, cached.result)
+        return WhatIfResponse(sid, False, cached.views, cached.created_at, result, cached.spec)
+    return WhatIfResponse(sid, True, cached.views, cached.created_at, cached.result, cached.spec)

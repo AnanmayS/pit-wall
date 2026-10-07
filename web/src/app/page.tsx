@@ -11,7 +11,13 @@ const CARDS = [
     href: "/what-if",
     title: "What-If",
     body: "Re-run a race with a different strategy and compare outcomes.",
-    status: "Milestone 2",
+    status: "Live",
+  },
+  {
+    href: "/ask",
+    title: "Ask the Pit Wall",
+    body: "Ask a question in plain English and get an answer checked against the data.",
+    status: "Live",
   },
   {
     href: "/odds",
@@ -30,7 +36,7 @@ export default function Home() {
           F1 telemetry analysis and race simulation. Pick a tool to get started.
         </p>
       </section>
-      <section className="mt-10 grid gap-4 sm:grid-cols-3">
+      <section className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {CARDS.map((card) => (
           <Link
             key={card.href}
