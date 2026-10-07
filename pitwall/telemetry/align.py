@@ -22,7 +22,17 @@ FULL_THROTTLE_PCT = 90.0
 # Brake-off gaps shorter than this are treated as one braking zone (sensor flicker, re-applies).
 BRAKE_MERGE_GAP_M = 20.0
 
-GRID_COLUMNS = ["distance_m", "time_ms", "speed_kph", "throttle_pct", "brake", "gear", "drs"]
+GRID_COLUMNS = [
+    "distance_m",
+    "time_ms",
+    "speed_kph",
+    "throttle_pct",
+    "brake",
+    "gear",
+    "drs",
+    "x",
+    "y",
+]
 _INTERPOLATED = ("speed_kph", "throttle_pct")
 _STEPPED = ("brake", "gear", "drs")
 
@@ -92,7 +102,10 @@ def resample_to_distance(tel: pd.DataFrame, step_m: float = 1.0) -> pd.DataFrame
         "distance_m": grid,
         "time_ms": np.interp(grid, distance, elapsed_ms),
     }
-    for col in _INTERPOLATED:
+    for col in _INTERPOLATED + ("x", "y"):
+        if col not in df:
+            out[col] = np.zeros(n_points)  # position channels are optional (synthetic tests)
+            continue
         values = df[col].astype("float64").ffill().bfill().fillna(0.0).to_numpy()[first_idx]
         out[col] = np.interp(grid, distance, values)
 

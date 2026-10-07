@@ -278,16 +278,29 @@ def get_corners(season: int, round: int, client: Client | None = None) -> pd.Dat
     df = _query_df(
         client,
         """
-        SELECT corner_number, corner_letter, distance_m
+        SELECT corner_number, corner_letter, distance_m, x, y
         FROM circuit_corners FINAL
         WHERE season = {season:UInt16} AND round = {round:UInt8}
         ORDER BY distance_m
         """,
         {"season": season, "round": round},
-        ("corner_number", "corner_letter", "distance_m"),
+        ("corner_number", "corner_letter", "distance_m", "x", "y"),
     )
     df["name"] = [
         corner_name(n, letter)
         for n, letter in zip(df["corner_number"], df["corner_letter"], strict=True)
     ]
     return df
+
+
+def get_circuit_rotation(season: int, round: int, client: Client | None = None) -> float:
+    """Circuit rotation (degrees) FastF1 uses to draw the track map upright; 0 if unknown."""
+    rows = (
+        _client(client)
+        .query(
+            "SELECT any(circuit_rotation) FROM sessions FINAL WHERE season={s:UInt16} AND round={r:UInt8}",
+            parameters={"s": season, "r": round},
+        )
+        .result_rows
+    )
+    return float(rows[0][0]) if rows and rows[0][0] is not None else 0.0

@@ -97,6 +97,7 @@ def test_compare_shape_defaults_to_fastest_laps(client: TestClient):
         "corners",
         "insights",
         "key_segments",
+        "track",
     }
     meta = body["meta"]
     assert (meta["driver_a"], meta["lap_a"], meta["driver_b"], meta["lap_b"]) == (

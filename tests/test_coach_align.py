@@ -127,6 +127,8 @@ def test_resample_grid_and_elapsed_time():
         "brake",
         "gear",
         "drs",
+        "x",
+        "y",
     ]
 
 

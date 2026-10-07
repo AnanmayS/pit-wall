@@ -28,6 +28,8 @@ from pitwall.telemetry.models import (
     Insight,
     KeySegment,
     SegmentDelta,
+    TrackCorner,
+    TrackMap,
 )
 
 MAX_GRID_POINTS = 2000
@@ -98,6 +100,7 @@ def compare_laps(
         lap_time_b_ms=_lap_time(lap_times, driver_b, lap_b),
         step_m=step_m,
         normalize_length=normalize_length,
+        rotation_deg=queries.get_circuit_rotation(season, round),
     )
 
 
@@ -118,6 +121,7 @@ def build_comparison(
     lap_time_b_ms: int | None,
     step_m: float = 1.0,
     normalize_length: bool = True,
+    rotation_deg: float = 0.0,
 ) -> CompareResult:
     """Pure part of compare_laps: telemetry frames + corner table in, CompareResult out.
 
@@ -185,6 +189,40 @@ def build_comparison(
         corners=corner_rows,
         insights=insights,
         key_segments=key_segments(segment_deltas, driver_a, driver_b),
+        track=_track_map(grid_a, delta, corners, rotation_deg),
+    )
+
+
+def _track_map(
+    grid_a: pd.DataFrame, delta: pd.DataFrame, corners: pd.DataFrame, rotation_deg: float
+) -> TrackMap:
+    """Driver A's x/y at the same downsampled indices as the transport grid, plus corner markers."""
+    idx = downsample_indices(len(delta), MAX_GRID_POINTS)
+    n = len(delta)
+    xs = grid_a["x"].to_numpy(dtype=np.float64)[:n]
+    ys = grid_a["y"].to_numpy(dtype=np.float64)[:n]
+    dist = grid_a["distance_m"].to_numpy(dtype=np.float64)[:n]
+    rows: list[TrackCorner] = []
+    has_xy = (
+        "x" in corners
+        and "y" in corners
+        and corners[["x", "y"]].notna().all().all()
+        and len(corners)
+    )
+    for r in corners.itertuples():
+        d = float(r.distance_m)
+        if has_xy and float(r.x) != 0.0 or (has_xy and float(r.y) != 0.0):
+            cx, cy = float(r.x), float(r.y)
+        else:
+            cx, cy = float(np.interp(d, dist, xs)), float(np.interp(d, dist, ys))
+        rows.append(
+            TrackCorner(name=str(r.name), distance_m=round(d, 1), x=round(cx, 1), y=round(cy, 1))
+        )
+    return TrackMap(
+        x=np.round(xs[idx], 1).tolist(),
+        y=np.round(ys[idx], 1).tolist(),
+        rotation_deg=float(rotation_deg),
+        corners=rows,
     )
 
 

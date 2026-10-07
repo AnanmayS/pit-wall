@@ -81,6 +81,26 @@ class CompareGrid(BaseModel):
     gear_b: list[int]
 
 
+class TrackCorner(BaseModel):
+    name: str
+    distance_m: float
+    x: float
+    y: float
+
+
+class TrackMap(BaseModel):
+    """Driver A's path on the aligned grid (same indices as `grid`), in FastF1 position units (1/10 m).
+
+    Rotate by `rotation_deg` to draw the circuit the way FastF1 does. Corner markers come from the
+    circuit info when stored, else from the path at the corner's distance.
+    """
+
+    x: list[float]
+    y: list[float]
+    rotation_deg: float
+    corners: list[TrackCorner]
+
+
 class SegmentDelta(BaseModel):
     """Time lost by A inside one corner segment (positive = A slower there)."""
 
@@ -144,3 +164,4 @@ class CompareResult(BaseModel):
     corners: list[CornerComparison]
     insights: list[Insight]
     key_segments: list[KeySegment]
+    track: TrackMap
