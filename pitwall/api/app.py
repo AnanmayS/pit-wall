@@ -159,6 +159,67 @@ def create_app() -> FastAPI:
             raise HTTPException(404, f"Unknown scenario {scenario_id}")
         return resp.to_dict()
 
+    # ---- Title Odds (milestone 3) ----
+    @app.get("/api/odds/latest")
+    def odds_latest(season: Annotated[int, Query(ge=1950, le=2100)]) -> dict:
+        """Latest forecast per kind (title, constructors, race_win, conditionals) for a season."""
+        client = queries.client_for_thread()
+        df = client.query_df(
+            """
+            SELECT kind, round, driver, team, probability, n_sims, as_of, after_round, model_version
+            FROM forecasts FINAL
+            WHERE season={s:UInt16} AND as_of = (SELECT max(as_of) FROM forecasts WHERE season={s:UInt16})
+            ORDER BY kind, probability DESC
+            """,
+            parameters={"s": season},
+        )
+        if df.empty:
+            raise HTTPException(404, f"No forecasts stored for {season}")
+        out: dict = {
+            "season": season,
+            "as_of": str(df["as_of"].iloc[0]),
+            "after_round": int(df["after_round"].iloc[0]),
+            "model_version": str(df["model_version"].iloc[0]),
+            "n_sims": int(df["n_sims"].max()),
+        }
+        for kind, g in df.groupby("kind"):
+            out[kind] = [
+                {
+                    "driver": r.driver or None,
+                    "team": r.team or None,
+                    "round": None if r.round != r.round else int(r.round),
+                    "probability": float(r.probability),
+                }
+                for r in g.itertuples()
+            ]
+        return out
+
+    @app.get("/api/odds/history")
+    def odds_history(
+        season: Annotated[int, Query(ge=1950, le=2100)],
+        kind: Annotated[str, Query(pattern="^(title|constructors|race_win)$")] = "title",
+        top: Annotated[int, Query(ge=1, le=30)] = 6,
+    ) -> dict:
+        """How the probabilities moved after each round (for the odds chart)."""
+        client = queries.client_for_thread()
+        df = client.query_df(
+            "SELECT as_of, after_round, driver, team, probability FROM forecasts FINAL "
+            "WHERE season={s:UInt16} AND kind={k:String} ORDER BY as_of, probability DESC",
+            parameters={"s": season, "k": kind},
+        )
+        if df.empty:
+            raise HTTPException(404, f"No {kind} forecasts stored for {season}")
+        key = "driver" if kind != "constructors" else "team"
+        latest = df[df["as_of"] == df["as_of"].max()].nlargest(top, "probability")[key].tolist()
+        points = []
+        for as_of, g in df.groupby("as_of", sort=True):
+            row = {"as_of": str(as_of), "after_round": int(g["after_round"].iloc[0])}
+            for name in latest:
+                m = g[g[key] == name]
+                row[name] = float(m["probability"].iloc[0]) if not m.empty else None
+            points.append(row)
+        return {"season": season, "kind": kind, "series": latest, "points": points}
+
     # ---- AI (milestone 2) ----
     class AskRequest(BaseModel):
         question: str = Field(min_length=3, max_length=500)
