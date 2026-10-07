@@ -326,6 +326,14 @@ def fit_race(
         .replace(0, len(drivers))
         .to_numpy()
     )
+    # every compound a strategy (or a counterfactual change) can use needs a model; label defaults
+    default_offsets = {"SOFT": -0.5, "MEDIUM": 0.0, "HARD": 0.4, "INTERMEDIATE": 4.0, "WET": 8.0}
+    for c in COMPOUNDS:
+        if c not in tyres:
+            tyres[c] = TyreModel(offset=default_offsets[c], d1=DEFAULTS["d1"][c], d2=0.0)
+            assumptions[f"tyre:{c}"] = (
+                f"no clean laps on {c} in this race; default offset {default_offsets[c]:+.1f} s, d1={DEFAULTS['d1'][c]}"
+            )
     params = RaceParams(
         n_laps=n_laps,
         drivers=drivers,
