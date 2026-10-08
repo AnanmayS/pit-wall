@@ -301,6 +301,27 @@ def create_app() -> FastAPI:
             "points": points,
         }
 
+    @app.get("/api/odds/market")
+    def odds_market(season: Annotated[int, Query(ge=1950, le=2100)]) -> dict:
+        """Our latest forecast next to Polymarket's prices (title + next race), with daily market history."""
+        from pitwall.odds.market_view import market_comparison
+
+        out = market_comparison(season, queries.client_for_thread())
+        names = queries.driver_names(season)
+        race_names = _race_names(season)
+        for section in (out["title"], out["next_race"]):
+            for r in section["rows"]:
+                r["driver_name"] = str(names.get(r["driver"], {}).get("full_name") or r["driver"])
+        out["next_race"]["event_name"] = (
+            race_names.get(out["next_race"]["round"]) if out["next_race"]["round"] else None
+        )
+        out["history"]["series_names"] = {
+            c: str(names.get(c, {}).get("full_name") or c) for c in out["history"]["series"]
+        }
+        if not out["title"]["rows"] and not out["next_race"]["rows"]:
+            raise HTTPException(404, f"No forecast or market data for {season}")
+        return out
+
     # ---- AI (milestone 2) ----
     class AskRequest(BaseModel):
         question: str = Field(min_length=3, max_length=500)
