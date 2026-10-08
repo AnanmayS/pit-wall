@@ -147,19 +147,6 @@ def create_app() -> FastAPI:
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
 
-    @app.get("/api/whatif/recent")
-    def whatif_recent(
-        season: Annotated[int, Query(ge=1950, le=2100)], round: Annotated[int, Query(ge=1, le=30)]
-    ) -> list[dict]:
-        return store.list_recent(season, round)
-
-    @app.get("/api/whatif/{scenario_id}")
-    def whatif_get(scenario_id: Annotated[str, Path(pattern=r"^[0-9A-Za-z]{8,16}$")]) -> dict:
-        resp = open_shared(scenario_id)
-        if resp is None:
-            raise HTTPException(404, f"Unknown scenario {scenario_id}")
-        return resp.to_dict()
-
     @app.get("/api/whatif/track")
     def whatif_track(
         season: Annotated[int, Query(ge=1950, le=2100)],
@@ -173,6 +160,19 @@ def create_app() -> FastAPI:
         if state is None:
             raise HTTPException(404, f"No position telemetry for {season} round {round} lap {lap}")
         return state.model_dump()
+
+    @app.get("/api/whatif/recent")
+    def whatif_recent(
+        season: Annotated[int, Query(ge=1950, le=2100)], round: Annotated[int, Query(ge=1, le=30)]
+    ) -> list[dict]:
+        return store.list_recent(season, round)
+
+    @app.get("/api/whatif/{scenario_id}")
+    def whatif_get(scenario_id: Annotated[str, Path(pattern=r"^[0-9A-Za-z]{8,16}$")]) -> dict:
+        resp = open_shared(scenario_id)
+        if resp is None:
+            raise HTTPException(404, f"Unknown scenario {scenario_id}")
+        return resp.to_dict()
 
     # ---- Title Odds (milestone 3) ----
     @app.get("/api/odds/latest")

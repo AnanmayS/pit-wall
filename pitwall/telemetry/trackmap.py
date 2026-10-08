@@ -42,9 +42,9 @@ class RaceStateMap(BaseModel):
     cars: list[CarOnTrack]
 
 
-def race_state_map(season: int, round: int, lap: int, client=None) -> RaceStateMap | None:
+def race_state_map(season: int, round_no: int, lap: int, client=None) -> RaceStateMap | None:
     client = queries._client(client)
-    p = {"s": season, "r": round, "lap": lap}
+    p = {"s": season, "r": round_no, "lap": lap}
     leader = client.query_df(
         "SELECT driver, lap_start_session_ms FROM laps FINAL WHERE season={s:UInt16} AND round={r:UInt8} "
         "AND session_type='R' AND lap_number={lap:UInt8} AND position=1 LIMIT 1",
@@ -54,13 +54,13 @@ def race_state_map(season: int, round: int, lap: int, client=None) -> RaceStateM
         return None
     leader_code = str(leader["driver"].iloc[0])
     t0 = int(leader["lap_start_session_ms"].iloc[0])
-    path_tel = queries.get_lap_telemetry(season, round, "R", leader_code, lap, client)
+    path_tel = queries.get_lap_telemetry(season, round_no, "R", leader_code, lap, client)
     if path_tel.empty or path_tel["distance_m"].nunique() < 10:
         return None
     grid = resample_to_distance(path_tel, 1.0)
     idx = downsample_indices(len(grid), MAX_POINTS)
     xs, ys, ds = (grid[c].to_numpy(dtype=np.float64) for c in ("x", "y", "distance_m"))
-    corners_df = queries.get_corners(season, round, client)
+    corners_df = queries.get_corners(season, round_no, client)
     corners = []
     for r in corners_df.itertuples():
         d = float(r.distance_m)
@@ -80,7 +80,7 @@ def race_state_map(season: int, round: int, lap: int, client=None) -> RaceStateM
     track = TrackMap(
         x=np.round(xs[idx], 1).tolist(),
         y=np.round(ys[idx], 1).tolist(),
-        rotation_deg=queries.get_circuit_rotation(season, round, client),
+        rotation_deg=queries.get_circuit_rotation(season, round_no, client),
         corners=corners,
     )
     # every car's nearest sample to t0, looking at the laps around `lap` (lapped cars are behind)
@@ -146,7 +146,7 @@ def race_state_map(season: int, round: int, lap: int, client=None) -> RaceStateM
     rows.sort(key=lambda r: (r.position is None, r.position or 99, r.gap_to_leader_ms))
     return RaceStateMap(
         season=season,
-        round=round,
+        round=round_no,
         lap=lap,
         leader=leader_code,
         session_ms=t0,
