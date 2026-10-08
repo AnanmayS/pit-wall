@@ -106,6 +106,12 @@ def race_state_map(season: int, round_no: int, lap: int, client=None) -> RaceSta
         """,
         parameters=p,
     ).set_index("driver")
+    leader_lap_ms = client.query(
+        "SELECT lap_time_ms FROM laps FINAL WHERE season={s:UInt16} AND round={r:UInt8} AND session_type='R' "
+        "AND lap_number={lap:UInt8} AND driver={d:String}",
+        parameters=p | {"d": leader_code},
+    ).result_rows
+    leader_lap_ms = int(leader_lap_ms[0][0]) if leader_lap_ms and leader_lap_ms[0][0] else 90_000
     rows: list[CarOnTrack] = []
     for c in cars.itertuples():
         info = laps.loc[c.driver] if c.driver in laps.index else None
@@ -114,12 +120,16 @@ def race_state_map(season: int, round_no: int, lap: int, client=None) -> RaceSta
             if info is not None and pd.notna(info["lap_start_session_ms"])
             else None
         )
-        gap = (start - t0) if start is not None and int(c.lap_number) >= lap else None
-        if gap is None:
-            # lapped or no lap row: approximate from distance behind along the leader's lap
-            gap = int(
-                max(0, (ds[-1] - float(c.distance_m)) / max(ds[-1], 1) * 100_000)
-            ) + 100_000 * max(0, lap - int(c.lap_number))
+        if start is not None:
+            # time behind the leader = how much later this car starts the same lap
+            gap = max(0, start - t0)
+        else:
+            # no row for this lap (retired or lapped out): distance-based approximation
+            gap = (
+                int((ds[-1] - float(c.distance_m)) / max(ds[-1], 1.0) * leader_lap_ms)
+                + leader_lap_ms
+            )
+        laps_behind = int(gap // leader_lap_ms)
         in_pit = False
         if info is not None:
             pin, pout = info["pit_in_session_ms"], info["pit_out_session_ms"]
@@ -131,7 +141,7 @@ def race_state_map(season: int, round_no: int, lap: int, client=None) -> RaceSta
                 position=int(info["position"])
                 if info is not None and pd.notna(info["position"])
                 else None,
-                lap_number=int(c.lap_number),
+                lap_number=lap - laps_behind,
                 distance_m=round(float(c.distance_m), 1),
                 x=round(float(c.x), 1),
                 y=round(float(c.y), 1),
