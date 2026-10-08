@@ -16,6 +16,7 @@ export function ScenarioResultView({
   result: ScenarioResult;
   /** The scenario's changes, when known (the result itself may omit them). */
   spec: ScenarioSpec | null;
+  /** Race name for the header; omitted while it is still being resolved. */
   eventName?: string | null;
 }) {
   const changed = new Set(result.changed_drivers.map((d) => d.driver));
@@ -32,7 +33,7 @@ export function ScenarioResultView({
       <div className="space-y-4 rounded-xl border border-border bg-surface p-5">
         <div>
           <p className="text-xs text-muted">
-            {result.season} &middot; Round {result.round}
+            {result.season}
             {eventName ? ` · ${eventName}` : ""} &middot; branching at lap {result.branch_lap}
           </p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight">Scenario result</h2>

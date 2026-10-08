@@ -12,12 +12,23 @@ import {
 } from "recharts";
 import { COLORS, axisTick, tooltipStyle } from "@/components/coach/chartTheme";
 import { formatPct, formatTimestamp } from "@/lib/format";
-import type { OddsHistory } from "@/lib/types";
+import { raceName, shortRaceName } from "@/lib/races";
+import type { OddsHistory, SessionSummary } from "@/lib/types";
 import { seriesColor } from "./seriesColors";
 
-/** Probability over time, one line per series; x = round the forecast was made after. */
-export function OddsHistoryChart({ history }: { history: OddsHistory }) {
-  const rows = history.points.map((p, i) => ({ ...p, _i: i, _label: `R${p.after_round}` }));
+/** Probability over time, one line per series; x = the race the forecast was made after. */
+export function OddsHistoryChart({
+  history,
+  sessions,
+}: {
+  history: OddsHistory;
+  /** Fallback for snapshots stored without a race name. */
+  sessions?: SessionSummary[] | null;
+}) {
+  const rows = history.points.map((p, i) => {
+    const race = p.after_race || (p.after_round > 0 ? raceName(sessions, p.after_round) : "Pre-season");
+    return { ...p, _i: i, _race: race, _label: shortRaceName(race) };
+  });
   const byIndex = new Map(rows.map((r) => [r._i, r]));
 
   if (rows.length === 0 || history.series.length === 0) {
@@ -46,7 +57,7 @@ export function OddsHistoryChart({ history }: { history: OddsHistory }) {
             {...tooltipStyle}
             labelFormatter={(i) => {
               const row = byIndex.get(Number(i));
-              return row ? `After R${row.after_round} · ${formatTimestamp(row.as_of)}` : "";
+              return row ? `After ${row._race} · ${formatTimestamp(row.as_of)}` : "";
             }}
             formatter={(value, name) => [formatPct(Number(value)), String(name)]}
             itemSorter={(item) => -Number(item.value ?? 0)}

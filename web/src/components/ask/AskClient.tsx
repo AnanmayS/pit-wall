@@ -65,7 +65,7 @@ export default function AskClient() {
           id="ask-question"
           rows={3}
           maxLength={MAX_QUESTION_CHARS}
-          placeholder="e.g. Where did NOR lose time to VER in qualifying at 2025 round 2?"
+          placeholder="e.g. Where did NOR lose time to VER in qualifying at the 2025 Chinese Grand Prix?"
           className={`${controlClass} h-auto resize-y py-2 leading-relaxed`}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
@@ -108,7 +108,7 @@ export default function AskClient() {
       <div aria-live="polite">
         {state.status === "idle" && (
           <Notice title="Ask a question or pick an example">
-            Questions should name a season and round, e.g. &ldquo;2025 round 2&rdquo;.
+            Questions should name a season and race, e.g. &ldquo;the 2025 Chinese Grand Prix&rdquo;.
           </Notice>
         )}
         {state.status === "loading" && (

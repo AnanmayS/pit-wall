@@ -1,9 +1,10 @@
 import { formatPct } from "@/lib/format";
+import { theRace } from "@/lib/races";
 import type { OddsEntry } from "@/lib/types";
 
 const TOP_N = 3;
 
-/** "If VER wins the next race his title chance is 62%, otherwise 41%" for the title favourites. */
+/** "If VER wins the Singapore Grand Prix his title chance is 62%, otherwise 41%" for the title favourites. */
 export function WhatHasToHappen({
   title,
   ifWin,
@@ -26,7 +27,7 @@ export function WhatHasToHappen({
     });
   if (lines.length === 0) return null;
 
-  const race = nextRace ?? "the next race";
+  const race = nextRace ? theRace(nextRace) : "the next race";
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
       <h3 className="text-sm font-medium">What has to happen</h3>

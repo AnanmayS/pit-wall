@@ -6,6 +6,7 @@ import { Field, Section, controlClass } from "@/components/Field";
 import { Notice, Spinner } from "@/components/Notice";
 import { API_BASE_URL, paths } from "@/lib/api";
 import type { DriverSummary, OddsHistory, OddsKind, OddsLatest, SessionSummary } from "@/lib/types";
+import { raceName } from "@/lib/races";
 import { useApi } from "@/lib/useApi";
 import { ConstructorsTable } from "./ConstructorsTable";
 import { KindToggle, ODDS_KINDS } from "./KindToggle";
@@ -36,11 +37,13 @@ export default function OddsClient() {
   const sessions = useApi<SessionSummary[]>(paths.sessions(season), reload);
   const forecast = latest.data;
 
-  // Next race name, from the round carried on race_win entries.
-  const nextRound = forecast?.race_win?.find((e) => e.round != null)?.round ?? null;
+  // Race names come with the forecast; the session list (or the bare round) is the fallback.
+  const nextRound = forecast?.next_round ?? forecast?.race_win?.find((e) => e.round != null)?.round ?? null;
   const nextRaceName =
-    nextRound != null
-      ? (sessions.data?.find((s) => s.round === nextRound)?.event_name ?? `round ${nextRound}`)
+    forecast?.next_race || (nextRound != null ? raceName(sessions.data, nextRound) : null);
+  const afterRaceName =
+    forecast && forecast.after_round > 0
+      ? forecast.after_race || raceName(sessions.data, forecast.after_round)
       : null;
 
   // Driver -> team from the last completed race (best effort; blank when unavailable).
@@ -99,7 +102,7 @@ export default function OddsClient() {
 
         {forecast && (
           <>
-            <OddsHeader latest={forecast} nextRace={nextRaceName} />
+            <OddsHeader latest={forecast} afterRace={afterRaceName} nextRace={nextRaceName} />
 
             <section className="space-y-3 rounded-xl border border-border bg-surface p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -117,7 +120,7 @@ export default function OddsClient() {
               {history.error && !history.error.isNotFound && (
                 <ErrorBanner title="Could not load history" error={history.error} onRetry={retry} />
               )}
-              {history.data && <OddsHistoryChart history={history.data} />}
+              {history.data && <OddsHistoryChart history={history.data} sessions={sessions.data} />}
             </section>
 
             <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
@@ -126,7 +129,7 @@ export default function OddsClient() {
                   title={forecast.title ?? []}
                   raceWin={forecast.race_win ?? []}
                   teams={teams}
-                  nextRound={nextRound}
+                  nextRace={nextRaceName}
                 />
               </Section>
               <div className="space-y-6">

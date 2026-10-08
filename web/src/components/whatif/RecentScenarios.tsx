@@ -10,11 +10,14 @@ import { describeSpec, formatTimestamp } from "@/lib/whatif";
 export function RecentScenarios({
   season,
   round,
+  raceLabel,
   nonce,
   currentId,
 }: {
   season: number;
   round: number;
+  /** Race name for the heading, e.g. "Chinese Grand Prix". */
+  raceLabel?: string | null;
   nonce: number;
   currentId?: string | null;
 }) {
@@ -24,7 +27,7 @@ export function RecentScenarios({
   return (
     <section className="space-y-3">
       <h2 className="text-xs font-medium uppercase tracking-widest text-muted">
-        Recent scenarios for this race
+        {raceLabel ? `Recent scenarios: ${season} ${raceLabel}` : "Recent scenarios for this race"}
       </h2>
       {recent.loading && <Spinner label="Loading recent scenarios" />}
       {recent.error && (

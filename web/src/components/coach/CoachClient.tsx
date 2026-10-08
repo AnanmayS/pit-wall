@@ -15,6 +15,7 @@ import {
   type SessionSummary,
   type SessionType,
 } from "@/lib/types";
+import { raceOptions } from "@/lib/races";
 import { useApi } from "@/lib/useApi";
 import { CompareView } from "./CompareView";
 
@@ -44,7 +45,7 @@ function parseSeason(input: string): number | null {
   return Number.isInteger(n) && n >= 1950 && n <= 2100 ? n : null;
 }
 
-function groupRounds(sessions: SessionSummary[] | null): RoundOption[] {
+function groupRounds(sessions: SessionSummary[] | null): (RoundOption & { label: string })[] {
   if (!sessions) return [];
   const byRound = new Map<number, RoundOption>();
   for (const s of sessions) {
@@ -52,7 +53,7 @@ function groupRounds(sessions: SessionSummary[] | null): RoundOption[] {
     entry.types.add(s.session_type);
     byRound.set(s.round, entry);
   }
-  return [...byRound.values()].sort((x, y) => x.round - y.round);
+  return raceOptions([...byRound.values()].sort((x, y) => x.round - y.round));
 }
 
 function lapLabel(lap: LapSummary): string {
@@ -237,7 +238,7 @@ export default function CoachClient() {
               }}
             />
           </Field>
-          <Field label={sessions.loading ? "Round (loading...)" : "Round"}>
+          <Field label={sessions.loading ? "Race weekend (loading...)" : "Race weekend"}>
             <select
               className={controlClass}
               value={round ?? ""}
@@ -247,7 +248,7 @@ export default function CoachClient() {
               {rounds.length === 0 && <option value="">-</option>}
               {rounds.map((r) => (
                 <option key={r.round} value={r.round}>
-                  R{r.round} &middot; {r.event_name}
+                  {r.label}
                 </option>
               ))}
             </select>

@@ -1,8 +1,8 @@
 export const EXAMPLE_QUESTIONS = [
-  "Where did NOR lose time to VER in qualifying at 2025 round 2?",
-  "What if NOR had pitted on lap 20 at 2025 round 2?",
-  "What was the gap at lap 30 of 2025 round 3?",
-  "Who had the fastest race lap at 2025 round 1, and on which tyre?",
+  "Where did NOR lose time to VER in qualifying at the 2025 Chinese Grand Prix?",
+  "What if NOR had pitted on lap 20 at the 2025 Chinese Grand Prix?",
+  "What was the gap at lap 30 of the 2025 Japanese Grand Prix?",
+  "Who had the fastest race lap at the 2025 Australian Grand Prix, and on which tyre?",
 ];
 
 export function ExampleChips({

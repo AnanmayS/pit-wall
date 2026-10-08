@@ -5,13 +5,14 @@ export function TitleOddsTable({
   title,
   raceWin,
   teams,
-  nextRound,
+  nextRace,
 }: {
   title: OddsEntry[];
   raceWin: OddsEntry[];
   /** driver code -> team name, when known. */
   teams: Map<string, string>;
-  nextRound: number | null;
+  /** Name of the next race, e.g. "Singapore Grand Prix". */
+  nextRace: string | null;
 }) {
   const winByDriver = new Map(raceWin.filter((e) => e.driver).map((e) => [e.driver as string, e.probability]));
   const rows = title.filter((e) => e.driver);
@@ -27,7 +28,7 @@ export function TitleOddsTable({
             <th className="px-3 py-2 font-medium">Team</th>
             <th className="px-3 py-2 text-right font-medium">P(title)</th>
             <th className="px-3 py-2 text-right font-medium">
-              P(win {nextRound != null ? `R${nextRound}` : "next race"})
+              P(win {nextRace ?? "next race"})
             </th>
           </tr>
         </thead>

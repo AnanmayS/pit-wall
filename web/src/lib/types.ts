@@ -323,6 +323,11 @@ export interface OddsLatest {
   season: number;
   as_of: string;
   after_round: number;
+  /** Name of the race the forecast was made after, e.g. "Bahrain Grand Prix". */
+  after_race?: string | null;
+  next_round?: number | null;
+  /** Name of the next race, e.g. "Singapore Grand Prix". */
+  next_race?: string | null;
   model_version: string;
   n_sims: number;
   title?: OddsEntry[];
@@ -338,6 +343,8 @@ export interface OddsLatest {
 export interface OddsHistoryPoint {
   as_of: string;
   after_round: number;
+  /** Name of the race the snapshot was made after; may be null on older snapshots. */
+  after_race: string | null;
   [series: string]: number | string | null;
 }
 

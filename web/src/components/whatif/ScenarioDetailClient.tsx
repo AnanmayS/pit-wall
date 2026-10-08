@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { Notice, Spinner } from "@/components/Notice";
 import { WHATIF_TIMEOUT_MS, paths } from "@/lib/api";
+import { raceName } from "@/lib/races";
 import type { RecentScenario, ScenarioResult, SessionSummary } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 import { RecentScenarios } from "./RecentScenarios";
@@ -20,11 +21,19 @@ export default function ScenarioDetailClient({ id }: { id: string }) {
   const recent = useApi<RecentScenario[]>(
     result && !result.spec ? paths.whatifRecent(result.season, result.round) : null,
   );
-  const eventName =
-    sessions.data?.find((s) => s.round === result?.round && s.session_type === "R")?.event_name ??
-    sessions.data?.find((s) => s.round === result?.round)?.event_name ??
-    null;
+  // Wait for the session list before naming the race, so the header does not flash "Round N".
+  const eventName = result && !sessions.loading ? raceName(sessions.data, result.round) : null;
   const spec = result?.spec ?? recent.data?.find((r) => r.id === id)?.spec ?? null;
+
+  // Shared links land here: name the tab after the race rather than the scenario id.
+  useEffect(() => {
+    if (!result || !eventName) return;
+    const previous = document.title;
+    document.title = `What if: ${result.season} ${eventName} | Pit Wall`;
+    return () => {
+      document.title = previous;
+    };
+  }, [result, eventName]);
 
   return (
     <div className="space-y-6">
@@ -66,7 +75,15 @@ export default function ScenarioDetailClient({ id }: { id: string }) {
         {result && <ScenarioResultView result={result} spec={spec} eventName={eventName} />}
       </div>
 
-      {result && <RecentScenarios season={result.season} round={result.round} nonce={0} currentId={id} />}
+      {result && (
+        <RecentScenarios
+          season={result.season}
+          round={result.round}
+          raceLabel={eventName}
+          nonce={0}
+          currentId={id}
+        />
+      )}
     </div>
   );
 }

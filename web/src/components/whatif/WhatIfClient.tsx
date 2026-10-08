@@ -7,6 +7,7 @@ import { Field, controlClass, primaryButtonClass, secondaryButtonClass } from "@
 import { Notice, Spinner } from "@/components/Notice";
 import { API_BASE_URL, paths, runScenario, toApiError, type ApiError } from "@/lib/api";
 import type { DriverSummary, ScenarioResult, ScenarioSpec, SessionSummary } from "@/lib/types";
+import { raceName, raceOptions } from "@/lib/races";
 import { useApi } from "@/lib/useApi";
 import {
   DEFAULT_RUNS,
@@ -28,8 +29,8 @@ function parseSeason(input: string): number | null {
   return Number.isInteger(n) && n >= 1950 && n <= 2100 ? n : null;
 }
 
-function raceRounds(sessions: SessionSummary[] | null): SessionSummary[] {
-  return (sessions ?? []).filter((s) => s.session_type === "R").sort((a, b) => a.round - b.round);
+function raceRounds(sessions: SessionSummary[] | null) {
+  return raceOptions((sessions ?? []).filter((s) => s.session_type === "R").sort((a, b) => a.round - b.round));
 }
 
 type RunState =
@@ -113,7 +114,7 @@ export default function WhatIfClient() {
     try {
       const result = await runScenario(spec, controller.signal);
       if (controller.signal.aborted) return;
-      setRun({ status: "done", result, spec, eventName: race?.event_name ?? null });
+      setRun({ status: "done", result, spec, eventName: race?.event_name || raceName(sessions.data, result.round) });
       window.history.pushState(null, "", `/what-if/${encodeURIComponent(result.id)}`);
       setRecentNonce((n) => n + 1);
     } catch (err) {
@@ -168,7 +169,7 @@ export default function WhatIfClient() {
               {races.length === 0 && <option value="">-</option>}
               {races.map((r) => (
                 <option key={r.round} value={r.round}>
-                  R{r.round} &middot; {r.event_name}
+                  {r.label}
                 </option>
               ))}
             </select>
@@ -282,6 +283,7 @@ export default function WhatIfClient() {
           season={season}
           round={round}
           nonce={recentNonce}
+          raceLabel={race?.event_name ?? null}
           currentId={shownResult?.result.id ?? null}
         />
       )}
