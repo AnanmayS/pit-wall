@@ -160,6 +160,20 @@ def create_app() -> FastAPI:
             raise HTTPException(404, f"Unknown scenario {scenario_id}")
         return resp.to_dict()
 
+    @app.get("/api/whatif/track")
+    def whatif_track(
+        season: Annotated[int, Query(ge=1950, le=2100)],
+        round: Annotated[int, Query(ge=1, le=30)],
+        lap: Annotated[int, Query(ge=1, le=255)],
+    ) -> dict:
+        """Where every car was on the circuit when the leader started `lap` (needs telemetry)."""
+        from pitwall.telemetry.trackmap import race_state_map
+
+        state = race_state_map(season, round, lap)
+        if state is None:
+            raise HTTPException(404, f"No position telemetry for {season} round {round} lap {lap}")
+        return state.model_dump()
+
     # ---- Title Odds (milestone 3) ----
     @app.get("/api/odds/latest")
     def odds_latest(season: Annotated[int, Query(ge=1950, le=2100)]) -> dict:
