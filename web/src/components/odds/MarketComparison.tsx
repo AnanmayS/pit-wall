@@ -10,13 +10,15 @@ export interface MarketComparisonProps {
   market: ProbabilityMap;
   /** Shown in the heading, e.g. "Polymarket". */
   marketName?: string;
+  /** Display name for a key, e.g. "NOR" -> "Lando Norris". */
+  nameOf?: (key: string) => string;
 }
 
 /**
  * "vs market" panel: our odds next to prediction-market odds.
  * Renders nothing until `market` has entries, so it can be mounted now and wired up later.
  */
-export function MarketComparison({ ours, market, marketName = "market" }: MarketComparisonProps) {
+export function MarketComparison({ ours, market, marketName = "market", nameOf }: MarketComparisonProps) {
   const names = Object.keys(market);
   if (names.length === 0) return null;
 
@@ -42,7 +44,7 @@ export function MarketComparison({ ours, market, marketName = "market" }: Market
               const edge = r.ours == null ? null : r.ours - r.market;
               return (
                 <tr key={r.name} className="border-b border-border/60 last:border-0">
-                  <td className="px-3 py-1.5 font-medium">{r.name}</td>
+                  <td className="px-3 py-1.5 font-medium">{nameOf ? nameOf(r.name) : r.name}</td>
                   <td className="px-3 py-1.5 text-right">{formatPct(r.ours)}</td>
                   <td className="px-3 py-1.5 text-right">{formatPct(r.market)}</td>
                   <td

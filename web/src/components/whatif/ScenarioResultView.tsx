@@ -1,4 +1,8 @@
+"use client";
+
+import { useMemo } from "react";
 import { Badge, Section } from "@/components/Field";
+import { driverName, useDrivers } from "@/lib/drivers";
 import { formatTimestamp } from "@/lib/whatif";
 import type { ScenarioResult, ScenarioSpec } from "@/lib/types";
 import { ChangedDriverCard } from "./ChangedDriverCard";
@@ -19,6 +23,15 @@ export function ScenarioResultView({
   /** Race name for the header; omitted while it is still being resolved. */
   eventName?: string | null;
 }) {
+  const names = useDrivers(result.season);
+  // Names the API sent with the result win; the season's driver list fills any gaps.
+  const nameOf = useMemo(() => {
+    const known = new Map<string, string>();
+    for (const d of [...result.summary, ...result.changed_drivers]) {
+      if (d.driver_name) known.set(d.driver, d.driver_name);
+    }
+    return (code: string) => driverName(names, code, known.get(code));
+  }, [names, result.summary, result.changed_drivers]);
   const changed = new Set(result.changed_drivers.map((d) => d.driver));
   // Drivers the scenario touches: the result's changed drivers plus any named in the spec.
   const scenarioDrivers = [
@@ -38,7 +51,7 @@ export function ScenarioResultView({
           </p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight">Scenario result</h2>
         </div>
-        {spec && <SpecSummary spec={spec} />}
+        {spec && <SpecSummary spec={spec} nameOf={nameOf} />}
         <div className="flex flex-wrap gap-2">
           <Badge tone={result.cache_hit ? "good" : "muted"}>
             {result.cache_hit ? "Cache hit" : "Fresh run"}
@@ -57,7 +70,7 @@ export function ScenarioResultView({
         <Section title="Changed drivers">
           <div className="grid gap-4 lg:grid-cols-2">
             {result.changed_drivers.map((d) => (
-              <ChangedDriverCard key={d.driver} outcome={d} />
+              <ChangedDriverCard key={d.driver} outcome={d} name={nameOf(d.driver)} />
             ))}
           </div>
         </Section>
@@ -71,7 +84,7 @@ export function ScenarioResultView({
       />
 
       <Section title="Full field">
-        <SummaryTable rows={result.summary} highlight={changed} />
+        <SummaryTable rows={result.summary} highlight={changed} nameOf={nameOf} />
       </Section>
 
       <ModelNotes assumptions={result.assumptions} fit={result.fit} />

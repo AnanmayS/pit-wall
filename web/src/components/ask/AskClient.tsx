@@ -65,7 +65,7 @@ export default function AskClient() {
           id="ask-question"
           rows={3}
           maxLength={MAX_QUESTION_CHARS}
-          placeholder="e.g. Where did NOR lose time to VER in qualifying at the 2025 Chinese Grand Prix?"
+          placeholder="e.g. Where did Lando Norris lose time to Max Verstappen in qualifying at the 2025 Chinese Grand Prix?"
           className={`${controlClass} h-auto resize-y py-2 leading-relaxed`}
           value={question}
           onChange={(e) => setQuestion(e.target.value)}

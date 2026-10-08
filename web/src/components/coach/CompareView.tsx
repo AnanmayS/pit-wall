@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { buildChartRows, contiguousZones, nearestRow } from "@/lib/chart";
+import { driverName, useDrivers } from "@/lib/drivers";
 import { formatDelta, formatLapTime } from "@/lib/format";
 import { SESSION_TYPES, type CompareResult } from "@/lib/types";
 import { CornerTable } from "./CornerTable";
@@ -33,8 +34,9 @@ export function CompareView({ result }: { result: CompareResult }) {
 
   const sessionLabel =
     SESSION_TYPES.find((s) => s.value === meta.session_type)?.label ?? meta.session_type;
-  const a = meta.driver_a;
-  const b = meta.driver_b;
+  const names = useDrivers(meta.season);
+  const a = driverName(names, meta.driver_a, meta.driver_a_name);
+  const b = driverName(names, meta.driver_b, meta.driver_b_name);
   const absDelta = formatDelta(Math.abs(total_delta_ms)).replace(/^\+/, "");
   const headline =
     Math.abs(total_delta_ms) < 0.5

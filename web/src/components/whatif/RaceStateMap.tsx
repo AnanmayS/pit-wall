@@ -24,6 +24,7 @@ import {
   type TrackGeometry,
 } from "@/components/track/trackGeometry";
 import { ApiError, getWhatIfTrack, paths, toApiError } from "@/lib/api";
+import { driverName, driverSurname, useDrivers, type DriverMap } from "@/lib/drivers";
 import { teamColor } from "@/lib/teams";
 import type { CarOnTrack, RaceStateMap as RaceState } from "@/lib/types";
 
@@ -34,6 +35,10 @@ const CHANGED_R = 10;
 const RING = "#ffffff";
 
 interface Car extends CarOnTrack {
+  /** "Lando Norris" */
+  name: string;
+  /** "Norris", for the map label and the running order. */
+  surname: string;
   /** Gap behind the leader car (ms), never negative. */
   gapMs: number;
   isLeader: boolean;
@@ -46,6 +51,7 @@ interface Car extends CarOnTrack {
 
 interface DotLabel {
   driver: string;
+  text: string;
   x: number;
   y: number;
   /** Where a short leader line meets the dot when the label had to move away from it. */
@@ -72,10 +78,10 @@ function formatTyre(car: CarOnTrack): string | null {
   return `${compound}, ${car.tyre_life} lap${car.tyre_life === 1 ? "" : "s"}`;
 }
 
-/** "P2 NOR · McLaren · +2.8 s to leader · MEDIUM, 15 laps" */
+/** "P2 Lando Norris · McLaren · +2.8 s to leader · MEDIUM, 15 laps" */
 function describeCar(car: Car): string {
   const parts = [
-    car.position != null ? `P${car.position} ${car.driver}` : car.driver,
+    car.position != null ? `P${car.position} ${car.name}` : car.name,
     car.team || "Unknown team",
     `${formatGap(car)}${car.lapped ? " (lapped)" : ""}`,
   ];
@@ -85,7 +91,12 @@ function describeCar(car: Car): string {
   return parts.join(" · ");
 }
 
-function prepareCars(state: RaceState, geo: TrackGeometry | null, changed: Set<string>): Car[] {
+function prepareCars(
+  state: RaceState,
+  geo: TrackGeometry | null,
+  changed: Set<string>,
+  names: DriverMap,
+): Car[] {
   const cars = state.cars ?? [];
   const leaderCar =
     cars.find((c) => c.driver === state.leader) ?? cars.find((c) => c.position === 1) ?? cars[0] ?? null;
@@ -96,6 +107,8 @@ function prepareCars(state: RaceState, geo: TrackGeometry | null, changed: Set<s
     const gap = Number.isFinite(c.gap_to_leader_ms) ? c.gap_to_leader_ms - leaderGap : 0;
     return {
       ...c,
+      name: driverName(names, c.driver, c.driver_name),
+      surname: driverSurname(names, c.driver, c.driver_name),
       gapMs: Math.max(0, gap),
       isLeader: c === leaderCar,
       lapped: Number.isFinite(c.lap_number) && c.lap_number < leaderLap,
@@ -110,7 +123,7 @@ const overlap = (a: Box, b: Box) =>
   Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
 
 /**
- * Put each driver code beside its dot, on the side of the track with more room, stepping further
+ * Put each driver's surname beside its dot, on the side of the track with more room, stepping further
  * out (or to the other side) when the spot is already taken by another label or dot.
  */
 function placeDotLabels(geo: TrackGeometry, cars: Car[], k: number): DotLabel[] {
@@ -126,7 +139,7 @@ function placeDotLabels(geo: TrackGeometry, cars: Car[], k: number): DotLabel[] 
   for (const car of order) {
     const p = car.p!;
     const fontSize = (car.changed ? 13 : 11.5) * k;
-    const w = car.driver.length * fontSize * 0.66 + 4 * k;
+    const w = car.surname.length * fontSize * 0.66 + 6 * k;
     const h = fontSize * 1.1;
     const r = (car.changed ? CHANGED_R : DOT_R) * k;
     const idx = nearestIndex(geo, p).index;
@@ -163,6 +176,7 @@ function placeDotLabels(geo: TrackGeometry, cars: Car[], k: number): DotLabel[] 
     const len = Math.hypot(dx, dy) || 1;
     out.push({
       driver: car.driver,
+      text: car.surname,
       x: best.c.x,
       y: best.c.y,
       lineFrom: far ? { x: p.x + (dx / len) * r, y: p.y + (dy / len) * r } : null,
@@ -201,7 +215,9 @@ function RaceStateFigure({ state, changed }: { state: RaceState; changed: Set<st
     if (!track || !Array.isArray(track.x) || !Array.isArray(track.y)) return null;
     return buildTrackGeometry(track.x, track.y, cumulativeDistance(track.x, track.y), track.rotation_deg);
   }, [track]);
-  const cars = useMemo(() => prepareCars(state, geo, changed), [state, geo, changed]);
+  const names = useDrivers(state.season);
+  const cars = useMemo(() => prepareCars(state, geo, changed, names), [state, geo, changed, names]);
+  const leaderName = cars.find((c) => c.driver === state.leader)?.name ?? driverName(names, state.leader);
 
   const [hover, setHover] = useState<string | null>(null);
   const [pxWidth, setPxWidth] = useState(VIEW_W);
@@ -307,7 +323,7 @@ function RaceStateFigure({ state, changed }: { state: RaceState; changed: Set<st
     <figure className="rounded-xl border border-border bg-surface p-4">
       <h3 className="mb-3 text-sm font-medium">
         Race state when the leader started lap {state.lap} &middot; leader{" "}
-        <span className="font-mono">{state.leader}</span>
+        <span>{leaderName}</span>
       </h3>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_13rem]">
@@ -319,7 +335,7 @@ function RaceStateFigure({ state, changed }: { state: RaceState; changed: Set<st
               width="100%"
               className="block h-auto touch-pan-y select-none"
               role="img"
-              aria-label={`Circuit map with each car's position when ${state.leader} started lap ${state.lap}`}
+              aria-label={`Circuit map with each car's position when ${leaderName} started lap ${state.lap}`}
               onPointerMove={handlePointer}
               onPointerDown={handlePointer}
               onPointerLeave={handleLeave}
@@ -365,7 +381,7 @@ function RaceStateFigure({ state, changed }: { state: RaceState; changed: Set<st
                       strokeWidth={3 * k}
                       paintOrder="stroke"
                     >
-                      {l.driver}
+                      {l.text}
                     </text>
                   );
                 })}
@@ -434,14 +450,14 @@ function RunningOrder({
             } ${hover === c.driver ? "bg-surface-2" : ""}`}
           >
             <span className="text-muted">{c.position != null ? `P${c.position}` : `${i + 1}`}</span>
-            <span className={`flex items-center gap-1.5 font-mono ${c.changed ? "font-bold" : "font-medium"}`}>
+            <span className={`flex min-w-0 items-center gap-1.5 ${c.changed ? "font-bold" : "font-medium"}`}>
               <span
                 className={`inline-block h-2 w-2 shrink-0 rounded-full ${c.changed ? "ring-1 ring-white" : ""}`}
                 style={c.in_pit ? { boxShadow: `inset 0 0 0 1.5px ${c.color}` } : { background: c.color }}
                 aria-hidden
               />
-              {c.driver}
-              {c.in_pit && <span className="font-sans text-[10px] font-medium text-amber-300">PIT</span>}
+              <span className="truncate">{c.surname}</span>
+              {c.in_pit && <span className="text-[10px] font-medium text-amber-300">PIT</span>}
             </span>
             <span className="text-right text-muted">
               {c.isLeader || c.gapMs <= 0 ? "Leader" : `+${(c.gapMs / 1000).toFixed(1)}`}

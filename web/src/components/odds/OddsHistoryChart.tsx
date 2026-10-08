@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { COLORS, axisTick, tooltipStyle } from "@/components/coach/chartTheme";
+import { driverName, driverSurname, type DriverMap } from "@/lib/drivers";
 import { formatPct, formatTimestamp } from "@/lib/format";
 import { raceName, shortRaceName } from "@/lib/races";
 import type { OddsHistory, SessionSummary } from "@/lib/types";
@@ -20,11 +21,20 @@ import { seriesColor } from "./seriesColors";
 export function OddsHistoryChart({
   history,
   sessions,
+  drivers,
 }: {
   history: OddsHistory;
   /** Fallback for snapshots stored without a race name. */
   sessions?: SessionSummary[] | null;
+  /** Season driver list, the fallback for driver names the history lacks. */
+  drivers?: DriverMap;
 }) {
+  // Driver series: surname in the legend, full name in the tooltip. Team series keep their name.
+  const isDrivers = history.kind !== "constructors";
+  const fullName = (s: string) =>
+    isDrivers ? driverName(drivers, s, history.series_names?.[s]) : (history.series_names?.[s] ?? s);
+  const shortName = (s: string) =>
+    isDrivers ? driverSurname(drivers, s, history.series_names?.[s]) : (history.series_names?.[s] ?? s);
   const rows = history.points.map((p, i) => {
     const race = p.after_race || (p.after_round > 0 ? raceName(sessions, p.after_round) : "Pre-season");
     return { ...p, _i: i, _race: race, _label: shortRaceName(race) };
@@ -59,7 +69,10 @@ export function OddsHistoryChart({
               const row = byIndex.get(Number(i));
               return row ? `After ${row._race} · ${formatTimestamp(row.as_of)}` : "";
             }}
-            formatter={(value, name) => [formatPct(Number(value)), String(name)]}
+            formatter={(value, name, item) => [
+              formatPct(Number(value)),
+              item?.dataKey != null ? fullName(String(item.dataKey)) : String(name),
+            ]}
             itemSorter={(item) => -Number(item.value ?? 0)}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -68,7 +81,7 @@ export function OddsHistoryChart({
               key={s}
               type="monotone"
               dataKey={s}
-              name={s}
+              name={shortName(s)}
               stroke={seriesColor(i)}
               strokeWidth={1.75}
               dot={rows.length <= 12 ? { r: 2.5 } : false}

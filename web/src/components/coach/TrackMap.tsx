@@ -434,7 +434,7 @@ export function TrackMap({
         </span>
       </div>
       <figcaption className="mt-2 text-xs text-muted">
-        Driver {driverA}&apos;s line, coloured by who is gaining time on each stretch; thicker and brighter means
+        {driverA}&apos;s line, coloured by who is gaining time on each stretch; thicker and brighter means
         a bigger gain per metre. Hover the track to read the gap and speeds at that point.
       </figcaption>
     </figure>

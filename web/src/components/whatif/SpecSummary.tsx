@@ -1,8 +1,8 @@
-import { describeSpec } from "@/lib/whatif";
+import { describeSpec, type NameOf } from "@/lib/whatif";
 import type { ScenarioSpec } from "@/lib/types";
 
-export function SpecSummary({ spec }: { spec: ScenarioSpec }) {
-  const lines = describeSpec(spec);
+export function SpecSummary({ spec, nameOf }: { spec: ScenarioSpec; nameOf?: NameOf }) {
+  const lines = describeSpec(spec, nameOf);
   if (lines.length === 0) return <p className="text-sm text-muted">No changes (baseline replay).</p>;
   return (
     <ul className="space-y-1 text-sm">

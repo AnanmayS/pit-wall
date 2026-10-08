@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Spinner } from "@/components/Notice";
 import { paths } from "@/lib/api";
+import { driverName, useDrivers } from "@/lib/drivers";
 import type { RecentScenario } from "@/lib/types";
 import { useApi } from "@/lib/useApi";
 import { describeSpec, formatTimestamp } from "@/lib/whatif";
@@ -23,6 +24,8 @@ export function RecentScenarios({
 }) {
   const recent = useApi<RecentScenario[]>(paths.whatifRecent(season, round), nonce);
   const items = recent.data ?? [];
+  const names = useDrivers(season);
+  const nameOf = (code: string) => driverName(names, code);
 
   return (
     <section className="space-y-3">
@@ -39,7 +42,7 @@ export function RecentScenarios({
       {items.length > 0 && (
         <ul className="divide-y divide-border/60 rounded-xl border border-border bg-surface">
           {items.map((s) => {
-            const lines = s.spec ? describeSpec(s.spec) : [];
+            const lines = s.spec ? describeSpec(s.spec, nameOf) : [];
             return (
               <li key={s.id}>
                 <Link

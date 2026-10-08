@@ -1,7 +1,15 @@
-import { formatPct } from "@/lib/whatif";
+import { formatPct, type NameOf } from "@/lib/whatif";
 import type { DriverOutcome } from "@/lib/types";
 
-export function SummaryTable({ rows, highlight }: { rows: DriverOutcome[]; highlight: Set<string> }) {
+export function SummaryTable({
+  rows,
+  highlight,
+  nameOf,
+}: {
+  rows: DriverOutcome[];
+  highlight: Set<string>;
+  nameOf: NameOf;
+}) {
   const sorted = [...rows].sort((a, b) => a.expected_position - b.expected_position);
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-surface">
@@ -26,9 +34,9 @@ export function SummaryTable({ rows, highlight }: { rows: DriverOutcome[]; highl
                 className={`border-b border-border/60 last:border-0 ${changed ? "bg-accent/10" : ""}`}
               >
                 <td className="px-3 py-1.5 text-muted">{i + 1}</td>
-                <td className="px-3 py-1.5 font-mono font-medium">
-                  {r.driver}
-                  {changed && <span className="ml-2 font-sans text-xs text-accent">changed</span>}
+                <td className="px-3 py-1.5 font-medium">
+                  {nameOf(r.driver)}
+                  {changed && <span className="ml-2 text-xs text-accent">changed</span>}
                 </td>
                 <td className="px-3 py-1.5 text-right">{formatPct(r.p_win)}</td>
                 <td className="px-3 py-1.5 text-right">{formatPct(r.p_podium)}</td>

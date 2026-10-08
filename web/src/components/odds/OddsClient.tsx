@@ -5,6 +5,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { Field, Section, controlClass } from "@/components/Field";
 import { Notice, Spinner } from "@/components/Notice";
 import { API_BASE_URL, paths } from "@/lib/api";
+import { driverName, useDrivers } from "@/lib/drivers";
 import type { DriverSummary, OddsHistory, OddsKind, OddsLatest, SessionSummary } from "@/lib/types";
 import { raceName } from "@/lib/races";
 import { useApi } from "@/lib/useApi";
@@ -53,10 +54,21 @@ export default function OddsClient() {
     teamRound != null && hasTeamSession ? paths.drivers(season, teamRound, "R") : null,
     reload,
   );
-  const teams = useMemo(
-    () => new Map((drivers.data ?? []).map((d) => [d.driver, d.team] as [string, string])),
-    [drivers.data],
-  );
+  const driverNames = useDrivers(season);
+  const teams = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const [code, d] of driverNames) if (d.team) out.set(code, d.team);
+    for (const d of drivers.data ?? []) if (d.team) out.set(d.driver, d.team);
+    return out;
+  }, [drivers.data, driverNames]);
+  // Names sent with the forecast win; the season's driver list covers the rest.
+  const nameOf = useMemo(() => {
+    const known = new Map<string, string>();
+    for (const list of [forecast?.title, forecast?.race_win, forecast?.title_if_next_win, forecast?.title_if_next_not_win]) {
+      for (const e of list ?? []) if (e.driver && e.driver_name) known.set(e.driver, e.driver_name);
+    }
+    return (code: string) => driverName(driverNames, code, known.get(code));
+  }, [forecast, driverNames]);
 
   const noForecast = latest.error?.isNotFound ?? false;
   const kindLabel = ODDS_KINDS.find((k) => k.value === kind)?.label ?? kind;
@@ -120,7 +132,7 @@ export default function OddsClient() {
               {history.error && !history.error.isNotFound && (
                 <ErrorBanner title="Could not load history" error={history.error} onRetry={retry} />
               )}
-              {history.data && <OddsHistoryChart history={history.data} sessions={sessions.data} />}
+              {history.data && <OddsHistoryChart history={history.data} sessions={sessions.data} drivers={driverNames} />}
             </section>
 
             <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
@@ -129,6 +141,7 @@ export default function OddsClient() {
                   title={forecast.title ?? []}
                   raceWin={forecast.race_win ?? []}
                   teams={teams}
+                  nameOf={nameOf}
                   nextRace={nextRaceName}
                 />
               </Section>
@@ -137,6 +150,7 @@ export default function OddsClient() {
                   title={forecast.title ?? []}
                   ifWin={forecast.title_if_next_win ?? []}
                   ifNotWin={forecast.title_if_next_not_win ?? []}
+                  nameOf={nameOf}
                   nextRace={nextRaceName}
                 />
                 <Section title="Constructors' championship">
@@ -146,7 +160,7 @@ export default function OddsClient() {
             </div>
 
             {/* Market odds are not wired up yet; renders nothing while `market` is empty. */}
-            <MarketComparison ours={toMap(forecast.title)} market={{}} marketName="Polymarket" />
+            <MarketComparison ours={toMap(forecast.title)} market={{}} marketName="Polymarket" nameOf={nameOf} />
           </>
         )}
       </div>

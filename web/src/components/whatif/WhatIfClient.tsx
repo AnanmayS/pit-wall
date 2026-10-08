@@ -6,6 +6,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { Field, controlClass, primaryButtonClass, secondaryButtonClass } from "@/components/Field";
 import { Notice, Spinner } from "@/components/Notice";
 import { API_BASE_URL, paths, runScenario, toApiError, type ApiError } from "@/lib/api";
+import { driverName, driverSurname, useDrivers } from "@/lib/drivers";
 import type { DriverSummary, ScenarioResult, ScenarioSpec, SessionSummary } from "@/lib/types";
 import { raceName, raceOptions } from "@/lib/races";
 import { useApi } from "@/lib/useApi";
@@ -65,10 +66,13 @@ export default function WhatIfClient() {
     season && round != null ? paths.drivers(season, round, "R") : null,
     reload,
   );
-  const driverList = useMemo(
-    () => [...(drivers.data ?? [])].sort((a, b) => a.driver.localeCompare(b.driver)),
-    [drivers.data],
-  );
+  const driverNames = useDrivers(season);
+  // Alphabetical by surname, the way a grid sheet reads.
+  const driverList = useMemo(() => {
+    const key = (d: DriverSummary) =>
+      `${driverSurname(driverNames, d.driver, d.full_name)} ${driverName(driverNames, d.driver, d.full_name)}`;
+    return [...(drivers.data ?? [])].sort((a, b) => key(a).localeCompare(key(b)));
+  }, [drivers.data, driverNames]);
   const maxLap = driverList.length > 0 ? Math.max(...driverList.map((d) => d.laps || 0)) || null : null;
   const resolveDriver = (pick: string) =>
     driverList.some((d) => d.driver === pick) ? pick : (driverList[0]?.driver ?? "");
@@ -208,6 +212,7 @@ export default function WhatIfClient() {
               draft={d}
               driver={resolveDriver(d.driver)}
               drivers={driverList}
+              names={driverNames}
               maxLap={maxLap}
               problems={built[i].problems}
               showProblems={attempted}

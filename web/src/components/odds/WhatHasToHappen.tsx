@@ -4,16 +4,19 @@ import type { OddsEntry } from "@/lib/types";
 
 const TOP_N = 3;
 
-/** "If VER wins the Singapore Grand Prix his title chance is 62%, otherwise 41%" for the title favourites. */
+/** "If Max Verstappen wins the Singapore Grand Prix his title chance is 62%, otherwise 41%" for the title favourites. */
 export function WhatHasToHappen({
   title,
   ifWin,
   ifNotWin,
+  nameOf,
   nextRace,
 }: {
   title: OddsEntry[];
   ifWin: OddsEntry[];
   ifNotWin: OddsEntry[];
+  /** driver code -> full name. */
+  nameOf: (code: string) => string;
   nextRace: string | null;
 }) {
   const win = new Map(ifWin.filter((e) => e.driver).map((e) => [e.driver as string, e.probability]));
@@ -23,7 +26,7 @@ export function WhatHasToHappen({
     .slice(0, TOP_N)
     .map((e) => {
       const d = e.driver as string;
-      return { driver: d, now: e.probability, win: win.get(d), notWin: notWin.get(d) };
+      return { driver: d, name: e.driver_name || nameOf(d), now: e.probability, win: win.get(d), notWin: notWin.get(d) };
     });
   if (lines.length === 0) return null;
 
@@ -34,23 +37,22 @@ export function WhatHasToHappen({
       <p className="mt-0.5 text-xs text-muted">How {race} moves the title picture for the current top {lines.length}.</p>
       <ul className="mt-3 space-y-2 text-sm">
         {lines.map((l) => (
-          <li key={l.driver} className="flex gap-2">
-            <span className="w-10 shrink-0 font-mono font-medium">{l.driver}</span>
+          <li key={l.driver}>
             <span>
               {l.win != null && l.notWin != null ? (
                 <>
-                  If {l.driver} wins {race} his title chance is{" "}
+                  If <span className="font-medium">{l.name}</span> wins {race} his title chance is{" "}
                   <span className="tabular text-emerald-300">{formatPct(l.win, 0)}</span>, otherwise{" "}
                   <span className="tabular text-red-300">{formatPct(l.notWin, 0)}</span>
                 </>
               ) : l.win != null ? (
                 <>
-                  If {l.driver} wins {race} his title chance is{" "}
+                  If <span className="font-medium">{l.name}</span> wins {race} his title chance is{" "}
                   <span className="tabular text-emerald-300">{formatPct(l.win, 0)}</span>
                 </>
               ) : (
                 <>
-                  If {l.driver} does not win {race} his title chance is{" "}
+                  If <span className="font-medium">{l.name}</span> does not win {race} his title chance is{" "}
                   <span className="tabular text-red-300">{formatPct(l.notWin, 0)}</span>
                 </>
               )}

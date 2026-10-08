@@ -1,6 +1,6 @@
 export const EXAMPLE_QUESTIONS = [
-  "Where did NOR lose time to VER in qualifying at the 2025 Chinese Grand Prix?",
-  "What if NOR had pitted on lap 20 at the 2025 Chinese Grand Prix?",
+  "Where did Lando Norris lose time to Max Verstappen in qualifying at the 2025 Chinese Grand Prix?",
+  "What if Lando Norris had pitted on lap 20 at the 2025 Chinese Grand Prix?",
   "What was the gap at lap 30 of the 2025 Japanese Grand Prix?",
   "Who had the fastest race lap at the 2025 Australian Grand Prix, and on which tyre?",
 ];

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { Notice, Spinner } from "@/components/Notice";
 import { API_BASE_URL, paths } from "@/lib/api";
+import { driverName, useDrivers, type DriverMap } from "@/lib/drivers";
 import { formatLapTime } from "@/lib/format";
 import {
   SESSION_TYPES,
@@ -72,6 +73,7 @@ function DriverLapControls({
   label,
   tone,
   drivers,
+  names,
   driver,
   onDriver,
   lap,
@@ -82,6 +84,7 @@ function DriverLapControls({
   label: string;
   tone: string;
   drivers: DriverSummary[];
+  names: DriverMap;
   driver: string;
   onDriver: (d: string) => void;
   lap: LapSelector;
@@ -107,7 +110,7 @@ function DriverLapControls({
           {drivers.length === 0 && <option value="">-</option>}
           {drivers.map((d) => (
             <option key={d.driver} value={d.driver}>
-              {d.driver} &middot; {d.team}
+              {driverName(names, d.driver, d.full_name)} &middot; {d.team}
             </option>
           ))}
         </select>
@@ -159,6 +162,7 @@ export default function CoachClient() {
     reload,
   );
   const driverList = useMemo(() => drivers.data ?? [], [drivers.data]);
+  const driverNames = useDrivers(season);
   const pickDriver = (selected: string, fallbackIndex: number) =>
     driverList.some((d) => d.driver === selected)
       ? selected
@@ -277,6 +281,7 @@ export default function CoachClient() {
             label="Driver A"
             tone="text-driver-a"
             drivers={driverList}
+            names={driverNames}
             driver={driverA}
             onDriver={(d) => {
               setDriverASel(d);
@@ -291,6 +296,7 @@ export default function CoachClient() {
             label="Driver B"
             tone="text-driver-b"
             drivers={driverList}
+            names={driverNames}
             driver={driverB}
             onDriver={(d) => {
               setDriverBSel(d);

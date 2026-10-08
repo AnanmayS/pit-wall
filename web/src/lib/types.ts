@@ -17,11 +17,26 @@ export interface SessionSummary {
   session_date: string;
 }
 
+/** GET /api/drivers?season= : every driver who took part in the season. */
+export interface DriverInfo {
+  /** 3-letter code, e.g. "NOR". */
+  driver: string;
+  driver_number: number | string | null;
+  /** "Lando Norris" */
+  full_name: string;
+  first_name: string;
+  last_name: string;
+  team: string;
+  country_code: string;
+}
+
 /** GET /api/sessions/{season}/{round}/{session_type}/drivers */
 export interface DriverSummary {
   driver: string;
   driver_number: number | string;
   team: string;
+  /** "Lando Norris"; absent from older API builds. */
+  full_name?: string | null;
   laps: number;
   fastest_lap_number: number | null;
   fastest_lap_ms: number | null;
@@ -48,6 +63,9 @@ export interface CompareMeta {
   event_name: string;
   driver_a: string;
   driver_b: string;
+  /** Full names, e.g. "Lando Norris"; absent from older API builds. */
+  driver_a_name?: string | null;
+  driver_b_name?: string | null;
   lap_a: number;
   lap_b: number;
   lap_time_a_ms: number;
@@ -186,6 +204,8 @@ export interface ScenarioSpec {
 
 export interface DriverOutcome {
   driver: string;
+  /** Full name, e.g. "Lando Norris". */
+  driver_name?: string | null;
   p_win: number;
   p_podium: number;
   p_points: number;
@@ -197,6 +217,8 @@ export interface DriverOutcome {
 
 export interface ChangedDriverOutcome {
   driver: string;
+  /** Full name, e.g. "Lando Norris". */
+  driver_name?: string | null;
   actual_position: number | null;
   expected_position: number;
   p_better_than_actual: number | null;
@@ -234,6 +256,8 @@ export interface ScenarioResult {
 /** One car's position on track in a race-state snapshot. */
 export interface CarOnTrack {
   driver: string;
+  /** Full name, e.g. "Lando Norris". */
+  driver_name?: string | null;
   team: string;
   position: number | null;
   /** The lap the car is on; below the leader's lap means it has been lapped. */
@@ -312,6 +336,8 @@ export type OddsKind = "title" | "constructors" | "race_win";
 
 export interface OddsEntry {
   driver: string | null;
+  /** Full name for driver entries, e.g. "Lando Norris"; null for constructors. */
+  driver_name?: string | null;
   team: string | null;
   /** Set for race_win (the next round) and the conditional lists. */
   round: number | null;
@@ -353,6 +379,8 @@ export interface OddsHistory {
   season: number;
   kind: OddsKind;
   series: string[];
+  /** Display name per series: driver code -> full name (team names map to themselves). */
+  series_names?: Record<string, string>;
   /** Ordered by as_of ascending. */
   points: OddsHistoryPoint[];
 }

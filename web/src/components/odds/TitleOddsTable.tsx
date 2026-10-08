@@ -5,12 +5,15 @@ export function TitleOddsTable({
   title,
   raceWin,
   teams,
+  nameOf,
   nextRace,
 }: {
   title: OddsEntry[];
   raceWin: OddsEntry[];
   /** driver code -> team name, when known. */
   teams: Map<string, string>;
+  /** driver code -> full name. */
+  nameOf: (code: string) => string;
   /** Name of the next race, e.g. "Singapore Grand Prix". */
   nextRace: string | null;
 }) {
@@ -38,7 +41,7 @@ export function TitleOddsTable({
             return (
               <tr key={driver} className="border-b border-border/60 last:border-0">
                 <td className="px-3 py-1.5 text-muted">{i + 1}</td>
-                <td className="px-3 py-1.5 font-mono font-medium">{driver}</td>
+                <td className="px-3 py-1.5 font-medium">{e.driver_name || nameOf(driver)}</td>
                 <td className="px-3 py-1.5 text-muted">{teams.get(driver) ?? ""}</td>
                 <td className="px-3 py-1.5 text-right">
                   <ProbabilityCell p={e.probability} />

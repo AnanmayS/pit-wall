@@ -88,9 +88,12 @@ function title(compound: Compound | null | undefined): string {
   return compound ? compound.charAt(0) + compound.slice(1).toLowerCase() : "an unspecified tyre";
 }
 
-/** "NOR pits on lap 20" etc. */
-export function describeChange(c: Change): string {
-  const who = c.driver ?? "A driver";
+/** Display name for a driver code; defaults to the code itself. */
+export type NameOf = (code: string) => string;
+
+/** "Lando Norris pits on lap 20" etc. */
+export function describeChange(c: Change, nameOf: NameOf = (code) => code): string {
+  const who = c.driver ? nameOf(c.driver) : "A driver";
   const lap = c.lap ?? "?";
   switch (c.type) {
     case "pit_lap":
@@ -112,8 +115,8 @@ export function describeChange(c: Change): string {
   }
 }
 
-export function describeSpec(spec: ScenarioSpec): string[] {
-  return spec.changes.map(describeChange);
+export function describeSpec(spec: ScenarioSpec, nameOf?: NameOf): string[] {
+  return spec.changes.map((c) => describeChange(c, nameOf));
 }
 
 export { formatPct, formatTimestamp } from "./format";

@@ -2,6 +2,7 @@
 
 import { Field, controlClass } from "@/components/Field";
 import { COMPOUNDS, type ChangeType, type Compound, type DriverSummary } from "@/lib/types";
+import { driverName, type DriverMap } from "@/lib/drivers";
 import { CHANGE_TYPES, fieldsFor, type ChangeDraft } from "@/lib/whatif";
 
 export function ChangeRow({
@@ -9,6 +10,7 @@ export function ChangeRow({
   draft,
   driver,
   drivers,
+  names,
   maxLap,
   problems,
   showProblems,
@@ -21,6 +23,8 @@ export function ChangeRow({
   /** Resolved driver (draft pick, or the default). */
   driver: string;
   drivers: DriverSummary[];
+  /** Season driver list, the fallback for names the session list lacks. */
+  names: DriverMap;
   maxLap: number | null;
   problems: string[];
   showProblems: boolean;
@@ -60,7 +64,7 @@ export function ChangeRow({
             {f.driver &&
               drivers.map((d) => (
                 <option key={d.driver} value={d.driver}>
-                  {d.driver} &middot; {d.team}
+                  {driverName(names, d.driver, d.full_name)} &middot; {d.team}
                 </option>
               ))}
           </select>
