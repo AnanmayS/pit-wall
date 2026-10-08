@@ -67,7 +67,7 @@ def _market_history(client, season: int, drivers: list[str]) -> list[dict[str, A
     for day, g in df.groupby("day", sort=True):
         raw = {str(r.driver): float(r.price) for r in g.itertuples() if str(r.driver) not in SKIP}
         probs = implied_probs(raw)["probs"] if raw else {}
-        out.append({"date": str(day)} | {d: probs.get(d) for d in drivers})
+        out.append({"date": str(pd.Timestamp(day).date())} | {d: probs.get(d) for d in drivers})
     return out
 
 
