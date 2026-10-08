@@ -3,6 +3,7 @@ import { formatTimestamp } from "@/lib/whatif";
 import type { ScenarioResult, ScenarioSpec } from "@/lib/types";
 import { ChangedDriverCard } from "./ChangedDriverCard";
 import { ModelNotes } from "./ModelNotes";
+import { RaceStateMap } from "./RaceStateMap";
 import { ShareLink } from "./ShareLink";
 import { SpecSummary } from "./SpecSummary";
 import { SummaryTable } from "./SummaryTable";
@@ -18,6 +19,13 @@ export function ScenarioResultView({
   eventName?: string | null;
 }) {
   const changed = new Set(result.changed_drivers.map((d) => d.driver));
+  // Drivers the scenario touches: the result's changed drivers plus any named in the spec.
+  const scenarioDrivers = [
+    ...new Set([
+      ...changed,
+      ...(spec?.changes ?? []).map((c) => c.driver).filter((d): d is string => !!d),
+    ]),
+  ].sort();
 
   return (
     <div className="space-y-8">
@@ -53,6 +61,13 @@ export function ScenarioResultView({
           </div>
         </Section>
       )}
+
+      <RaceStateMap
+        season={result.season}
+        round={result.round}
+        lap={result.branch_lap}
+        changedDrivers={scenarioDrivers}
+      />
 
       <Section title="Full field">
         <SummaryTable rows={result.summary} highlight={changed} />

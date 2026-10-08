@@ -153,7 +153,11 @@ def race_state_map(season: int, round_no: int, lap: int, client=None) -> RaceSta
                 in_pit=bool(in_pit),
             )
         )
-    rows.sort(key=lambda r: (r.position is None, r.position or 99, r.gap_to_leader_ms))
+    # running order at the lap start = order of gap (FastF1's per-lap Position is the end-of-lap
+    # classification, which differs for cars that pit during the lap)
+    rows.sort(key=lambda r: r.gap_to_leader_ms)
+    for i, r in enumerate(rows, start=1):
+        r.position = i
     return RaceStateMap(
         season=season,
         round=round_no,

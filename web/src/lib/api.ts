@@ -8,6 +8,7 @@ import type {
   OddsHistory,
   OddsKind,
   OddsLatest,
+  RaceStateMap,
   RecentScenario,
   ScenarioResult,
   ScenarioSpec,
@@ -158,6 +159,8 @@ export const paths = {
   whatif: (id: string) => `/api/whatif/${encodeURIComponent(id)}`,
   whatifRecent: (season: number, round: number) =>
     `/api/whatif/recent?${new URLSearchParams({ season: String(season), round: String(round) })}`,
+  whatifTrack: (season: number, round: number, lap: number) =>
+    `/api/whatif/track?${new URLSearchParams({ season: String(season), round: String(round), lap: String(lap) })}`,
 };
 
 // ---------------------------------------------------------------------------
@@ -211,6 +214,27 @@ export function getScenario(id: string, signal?: AbortSignal) {
 
 export function getRecentScenarios(season: number, round: number, signal?: AbortSignal) {
   return fetchJson<RecentScenario[]>(paths.whatifRecent(season, round), { signal });
+}
+
+/**
+ * Where every car was when the leader started `lap`. Resolves to null when the race has no
+ * position telemetry (the API answers 404, e.g. laps-only seasons).
+ */
+export async function getWhatIfTrack(
+  season: number,
+  round: number,
+  lap: number,
+  signal?: AbortSignal,
+): Promise<RaceStateMap | null> {
+  try {
+    return await fetchJson<RaceStateMap>(paths.whatifTrack(season, round, lap), {
+      signal,
+      timeoutMs: 120_000,
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.isNotFound) return null;
+    throw err;
+  }
 }
 
 export function ask(request: AskRequest, signal?: AbortSignal) {

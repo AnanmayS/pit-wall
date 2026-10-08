@@ -231,6 +231,36 @@ export interface ScenarioResult {
   fit: ScenarioFit;
 }
 
+/** One car's position on track in a race-state snapshot. */
+export interface CarOnTrack {
+  driver: string;
+  team: string;
+  position: number | null;
+  /** The lap the car is on; below the leader's lap means it has been lapped. */
+  lap_number: number;
+  distance_m: number;
+  /** Raw FastF1 position units, same frame as `CompareTrack.x/y`. */
+  x: number;
+  y: number;
+  gap_to_leader_ms: number;
+  compound: string;
+  tyre_life: number;
+  in_pit: boolean;
+}
+
+/** GET /api/whatif/track?season&round&lap: where every car was when the leader started `lap`. */
+export interface RaceStateMap {
+  season: number;
+  round: number;
+  lap: number;
+  leader: string;
+  session_ms: number;
+  /** The leader's lap as the circuit path. */
+  track: CompareTrack;
+  /** Sorted by position. */
+  cars: CarOnTrack[];
+}
+
 /** GET /api/whatif/recent?season&round */
 export interface RecentScenario {
   id: string;

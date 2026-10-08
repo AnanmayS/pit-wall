@@ -3,10 +3,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { deltaTone } from "@/lib/format";
 import type { CompareCorner, CompareGrid, CompareTrack } from "@/lib/types";
+import { CornerLabels, StartFinishIcon, StartFinishMark } from "@/components/track/TrackDecorations";
+import {
+  LIGHT,
+  SURFACE,
+  VIEW_W,
+  buildTrackGeometry,
+  clamp,
+  clientToView,
+  fmt,
+  nearestCornerName,
+  nearestIndex,
+  placeCornerLabels,
+  pointAt,
+  startFinishGeometry,
+  tangentAt,
+  trianglePoints,
+  type CornerLabel,
+  type Pt,
+  type TrackGeometry,
+} from "@/components/track/trackGeometry";
 import { COLORS } from "./chartTheme";
 
-const VIEW_W = 1000;
-const PAD = 64;
 /** Distance (m) over which the local gain is averaged before colouring. */
 const SMOOTH_M = 24;
 /** Local gains below this many ms per metre count as noise and stay neutral. */
@@ -14,15 +32,8 @@ const MIN_RATE = 0.01;
 /** Rates at or above this percentile of |rate| get full intensity. */
 const SATURATE_PCT = 0.9;
 const LEVELS = 5;
-const SURFACE = "#13161b";
-const LIGHT = "#e6e8eb";
 /** Pointer must be within this many viewBox units of the path to show the tooltip. */
 const HOVER_RADIUS = 90;
-
-interface Pt {
-  x: number;
-  y: number;
-}
 
 interface Run {
   d: string;
@@ -30,27 +41,12 @@ interface Run {
   level: number;
 }
 
-interface Geometry {
-  n: number;
-  width: number;
-  height: number;
-  px: number[];
-  py: number[];
-  dist: number[];
+interface Geometry extends TrackGeometry {
   delta: number[];
   /** Smoothed local gain per segment (ms per metre); negative = A gaining. */
   rate: number[];
   refRate: number;
-  path: string;
   runs: Run[];
-  toScreen: (x: number, y: number) => Pt;
-}
-
-interface Label {
-  key: string;
-  name: string;
-  x: number;
-  y: number;
 }
 
 type MarkerKind = "brake" | "apex" | "throttle";
@@ -67,9 +63,6 @@ interface Marker {
   title: string;
 }
 
-const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-const fmt = (v: number) => v.toFixed(1);
-
 function levelOf(rate: number, refRate: number): number {
   const m = Math.abs(rate);
   if (!Number.isFinite(m) || m < MIN_RATE) return 0;
@@ -77,51 +70,12 @@ function levelOf(rate: number, refRate: number): number {
 }
 
 function buildGeometry(track: CompareTrack | null | undefined, grid: CompareGrid): Geometry | null {
-  if (!track || !Array.isArray(track.x) || !Array.isArray(track.y)) return null;
+  if (!track) return null;
   const dist = grid.distance_m ?? [];
   const rawDelta = grid.delta_ms ?? [];
-  const n = Math.min(track.x.length, track.y.length, dist.length);
-  if (n < 10 || track.x.every((v) => v === 0)) return null;
-  for (let i = 0; i < n; i++) {
-    if (!Number.isFinite(track.x[i]) || !Number.isFinite(track.y[i]) || !Number.isFinite(dist[i])) {
-      return null;
-    }
-  }
-
-  // FastF1 convention: rotate, then flip y so north is up on screen.
-  const r = ((Number.isFinite(track.rotation_deg) ? track.rotation_deg : 0) * Math.PI) / 180;
-  const cos = Math.cos(r);
-  const sin = Math.sin(r);
-  const rotate = (x: number, y: number): Pt => ({ x: x * cos - y * sin, y: -(x * sin + y * cos) });
-
-  const rx: number[] = new Array(n);
-  const ry: number[] = new Array(n);
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (let i = 0; i < n; i++) {
-    const p = rotate(track.x[i], track.y[i]);
-    rx[i] = p.x;
-    ry[i] = p.y;
-    minX = Math.min(minX, p.x);
-    maxX = Math.max(maxX, p.x);
-    minY = Math.min(minY, p.y);
-    maxY = Math.max(maxY, p.y);
-  }
-  const spanX = Math.max(maxX - minX, 1);
-  const spanY = Math.max(maxY - minY, 1);
-  const width = VIEW_W;
-  const height = Math.round(VIEW_W * clamp(spanY / spanX, 0.45, 0.75));
-  const scale = Math.min((width - 2 * PAD) / spanX, (height - 2 * PAD) / spanY);
-  const ox = (width - spanX * scale) / 2 - minX * scale;
-  const oy = (height - spanY * scale) / 2 - minY * scale;
-  const toScreen = (x: number, y: number): Pt => {
-    const p = rotate(x, y);
-    return { x: p.x * scale + ox, y: p.y * scale + oy };
-  };
-  const px = rx.map((x) => x * scale + ox);
-  const py = ry.map((y) => y * scale + oy);
+  const base = buildTrackGeometry(track.x, track.y, dist, track.rotation_deg);
+  if (!base) return null;
+  const { n, px, py } = base;
   const delta = Array.from({ length: n }, (_, i) => {
     const v = rawDelta[i];
     return Number.isFinite(v) ? v : 0;
@@ -162,64 +116,7 @@ function buildGeometry(track: CompareTrack | null | undefined, grid: CompareGrid
   }
   if (cur && cur.key !== 0) runs.push(cur);
 
-  let path = `M${fmt(px[0])} ${fmt(py[0])}`;
-  for (let i = 1; i < n; i++) path += `L${fmt(px[i])} ${fmt(py[i])}`;
-
-  return { n, width, height, px, py, dist: dist.slice(0, n), delta, rate, refRate, path, runs, toScreen };
-}
-
-/** Screen position at a lap distance, linearly interpolated along the grid. */
-function pointAt(geo: Geometry, d: number): Pt {
-  const { dist, px, py, n } = geo;
-  if (d <= dist[0]) return { x: px[0], y: py[0] };
-  if (d >= dist[n - 1]) return { x: px[n - 1], y: py[n - 1] };
-  let lo = 0;
-  let hi = n - 1;
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1;
-    if (dist[mid] <= d) lo = mid;
-    else hi = mid;
-  }
-  const span = dist[hi] - dist[lo];
-  const t = span > 0 ? (d - dist[lo]) / span : 0;
-  return { x: px[lo] + (px[hi] - px[lo]) * t, y: py[lo] + (py[hi] - py[lo]) * t };
-}
-
-/** Unit tangent (direction of travel) at a lap distance. */
-function tangentAt(geo: Geometry, d: number): Pt {
-  const a = pointAt(geo, d - 12);
-  const b = pointAt(geo, d + 12);
-  const len = Math.hypot(b.x - a.x, b.y - a.y);
-  return len > 1e-6 ? { x: (b.x - a.x) / len, y: (b.y - a.y) / len } : { x: 1, y: 0 };
-}
-
-/** +1 or -1: which side of the path (along the left normal) has more free space at `p`. */
-function freeSide(geo: Geometry, p: Pt, normal: Pt, offset: number): 1 | -1 {
-  const stride = Math.max(1, Math.floor(geo.n / 400));
-  const clearance = (q: Pt) => {
-    let best = Infinity;
-    for (let i = 0; i < geo.n; i += stride) {
-      best = Math.min(best, (geo.px[i] - q.x) ** 2 + (geo.py[i] - q.y) ** 2);
-    }
-    const inside = q.x > 0 && q.x < geo.width && q.y > 0 && q.y < geo.height;
-    return inside ? best : best / 4;
-  };
-  const plus = clearance({ x: p.x + normal.x * offset, y: p.y + normal.y * offset });
-  const minus = clearance({ x: p.x - normal.x * offset, y: p.y - normal.y * offset });
-  return plus >= minus ? 1 : -1;
-}
-
-function nearestCornerName(d: number, corners: { name: string; distance_m: number }[]): string | null {
-  let best: string | null = null;
-  let bestGap = Infinity;
-  for (const c of corners) {
-    const gap = Math.abs(c.distance_m - d);
-    if (gap < bestGap) {
-      bestGap = gap;
-      best = c.name;
-    }
-  }
-  return best;
+  return { ...base, delta, rate, refRate, runs };
 }
 
 function formatGap(ms: number, driverA: string): string {
@@ -229,12 +126,7 @@ function formatGap(ms: number, driverA: string): string {
 }
 
 function TrianglePoints({ x, y, tx, ty, size }: { x: number; y: number; tx: number; ty: number; size: number }) {
-  const nx = -ty;
-  const ny = tx;
-  const tip = `${fmt(x + tx * size)},${fmt(y + ty * size)}`;
-  const l = `${fmt(x - tx * size * 0.7 + nx * size * 0.75)},${fmt(y - ty * size * 0.7 + ny * size * 0.75)}`;
-  const r = `${fmt(x - tx * size * 0.7 - nx * size * 0.75)},${fmt(y - ty * size * 0.7 - ny * size * 0.75)}`;
-  return <polygon points={`${tip} ${l} ${r}`} />;
+  return <polygon points={trianglePoints(x, y, tx, ty, size)} />;
 }
 
 function MarkerShape({ m, k }: { m: Marker; k: number }) {
@@ -328,7 +220,7 @@ export function TrackMap({
   // Marker and label sizes are in viewBox units; scale them up on narrow screens.
   const k = clamp(VIEW_W / pxWidth, 1, 2.4);
 
-  const labels = useMemo<Label[]>(() => {
+  const labels = useMemo<CornerLabel[]>(() => {
     if (!geo) return [];
     const source =
       track?.corners && track.corners.length > 0
@@ -338,18 +230,7 @@ export function TrackMap({
             p: c.x !== 0 || c.y !== 0 ? geo.toScreen(c.x, c.y) : pointAt(geo, c.distance_m),
           }))
         : corners.map((c) => ({ name: c.name, distance_m: c.distance_m, p: pointAt(geo, c.distance_m) }));
-    const offset = 22 * k;
-    return source.map((c) => {
-      const t = tangentAt(geo, c.distance_m);
-      const normal = { x: -t.y, y: t.x };
-      const s = freeSide(geo, c.p, normal, offset);
-      return {
-        key: `${c.name}-${c.distance_m}`,
-        name: c.name,
-        x: clamp(c.p.x + normal.x * offset * s, 14 * k, geo.width - 14 * k),
-        y: clamp(c.p.y + normal.y * offset * s, 10 * k, geo.height - 10 * k),
-      };
-    });
+    return placeCornerLabels(geo, source, k);
   }, [geo, track, corners, k]);
 
   const markers = useMemo<Marker[]>(() => {
@@ -384,28 +265,7 @@ export function TrackMap({
     return out;
   }, [geo, corners, driverA, driverB]);
 
-  const startFinish = useMemo(() => {
-    if (!geo) return null;
-    const lapLen = geo.dist[geo.n - 1] - geo.dist[0];
-    const p0 = pointAt(geo, geo.dist[0]);
-    const t0 = tangentAt(geo, geo.dist[0] + 6);
-    const n0 = { x: -t0.y, y: t0.x };
-    // Direction arrow: a short stretch shortly after the line, drawn beside the track.
-    const from = geo.dist[0] + Math.min(60, lapLen * 0.012);
-    const to = from + Math.min(240, lapLen * 0.05);
-    const mid = pointAt(geo, (from + to) / 2);
-    const tm = tangentAt(geo, (from + to) / 2);
-    const side = freeSide(geo, mid, { x: -tm.y, y: tm.x }, 20);
-    const pts: Pt[] = [];
-    for (let i = 0; i <= 8; i++) {
-      const d = from + ((to - from) * i) / 8;
-      const p = pointAt(geo, d);
-      const t = tangentAt(geo, d);
-      pts.push({ x: p.x - t.y * 18 * side, y: p.y + t.x * 18 * side });
-    }
-    const tEnd = tangentAt(geo, to);
-    return { p0, n0, pts, tEnd };
-  }, [geo]);
+  const startFinish = useMemo(() => (geo ? startFinishGeometry(geo) : null), [geo]);
 
   if (!geo) return null;
 
@@ -416,19 +276,10 @@ export function TrackMap({
     const svg = svgRef.current;
     const p = pending.current;
     if (!svg || !p || !geo) return;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return;
-    const local = new DOMPoint(p.x, p.y).matrixTransform(ctm.inverse());
-    let best = -1;
-    let bestD = Infinity;
-    for (let i = 0; i < geo.n; i++) {
-      const dd = (geo.px[i] - local.x) ** 2 + (geo.py[i] - local.y) ** 2;
-      if (dd < bestD) {
-        bestD = dd;
-        best = i;
-      }
-    }
-    const idx = best >= 0 && Math.sqrt(bestD) <= HOVER_RADIUS * k ? best : null;
+    const local = clientToView(svg, p.x, p.y);
+    if (!local) return;
+    const { index: best, distance } = nearestIndex(geo, local);
+    const idx = best >= 0 && distance <= HOVER_RADIUS * k ? best : null;
     setHover(idx);
     onHoverDistance?.(idx == null ? null : geo.dist[idx]);
   }
@@ -543,66 +394,13 @@ export function TrackMap({
             />
           ))}
 
-          {startFinish && (
-            <g>
-              <line
-                x1={startFinish.p0.x - startFinish.n0.x * 12 * k}
-                y1={startFinish.p0.y - startFinish.n0.y * 12 * k}
-                x2={startFinish.p0.x + startFinish.n0.x * 12 * k}
-                y2={startFinish.p0.y + startFinish.n0.y * 12 * k}
-                stroke={LIGHT}
-                strokeWidth={4 * k}
-              />
-              <line
-                x1={startFinish.p0.x - startFinish.n0.x * 12 * k}
-                y1={startFinish.p0.y - startFinish.n0.y * 12 * k}
-                x2={startFinish.p0.x + startFinish.n0.x * 12 * k}
-                y2={startFinish.p0.y + startFinish.n0.y * 12 * k}
-                stroke={SURFACE}
-                strokeWidth={4 * k}
-                strokeDasharray={`${3 * k} ${3 * k}`}
-              />
-              <polyline
-                points={startFinish.pts.map((p) => `${fmt(p.x)},${fmt(p.y)}`).join(" ")}
-                fill="none"
-                stroke={COLORS.axis}
-                strokeWidth={1.6 * k}
-                strokeLinecap="round"
-              />
-              <g fill={COLORS.axis}>
-                <TrianglePoints
-                  x={startFinish.pts[startFinish.pts.length - 1].x}
-                  y={startFinish.pts[startFinish.pts.length - 1].y}
-                  tx={startFinish.tEnd.x}
-                  ty={startFinish.tEnd.y}
-                  size={6 * k}
-                />
-              </g>
-              <title>Start/finish line and direction of travel</title>
-            </g>
-          )}
+          {startFinish && <StartFinishMark sf={startFinish} k={k} />}
 
           {visibleMarkers.map((m) => (
             <MarkerShape key={m.key} m={m} k={k} />
           ))}
 
-          {labels.map((l) => (
-            <text
-              key={l.key}
-              x={l.x}
-              y={l.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill={COLORS.axis}
-              fontSize={12 * k}
-              fontWeight={500}
-              stroke={SURFACE}
-              strokeWidth={3 * k}
-              paintOrder="stroke"
-            >
-              {l.name}
-            </text>
-          ))}
+          <CornerLabels labels={labels} k={k} />
 
           {hoverIdx != null && (
             <g pointerEvents="none">
@@ -631,10 +429,7 @@ export function TrackMap({
           </span>
         ))}
         <span className="flex items-center gap-1.5">
-          <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" aria-hidden>
-            <line x1={7} y1={1} x2={7} y2={13} stroke={LIGHT} strokeWidth={4} />
-            <line x1={7} y1={1} x2={7} y2={13} stroke={SURFACE} strokeWidth={4} strokeDasharray="3 3" />
-          </svg>
+          <StartFinishIcon />
           Start/finish
         </span>
       </div>
