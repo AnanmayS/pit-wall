@@ -64,6 +64,28 @@ def _lap_number(value: str | None, name: str) -> int | None:
     return int(value)
 
 
+def _race_names(season: int) -> dict[int, str]:
+    """round -> event name from the FastF1 schedule (covers rounds not yet ingested)."""
+    try:
+        import fastf1
+
+        from pitwall.config import get_settings
+
+        fastf1.Cache.enable_cache(str(get_settings().fastf1_cache_dir))
+        sched = fastf1.get_event_schedule(season, include_testing=False)
+        return {int(r.RoundNumber): str(r.EventName) for r in sched.itertuples()}
+    except Exception:  # noqa: BLE001 - names are decoration; fall back to ingested sessions
+        rows = (
+            queries.client_for_thread()
+            .query(
+                "SELECT round, any(event_name) FROM sessions FINAL WHERE season={s:UInt16} GROUP BY round",
+                parameters={"s": season},
+            )
+            .result_rows
+        )
+        return {int(r[0]): str(r[1]) for r in rows}
+
+
 def create_app() -> FastAPI:
     """Build the API application."""
     app = FastAPI(title="Pit Wall API", version="0.1.0")
@@ -190,10 +212,17 @@ def create_app() -> FastAPI:
         )
         if df.empty:
             raise HTTPException(404, f"No forecasts stored for {season}")
+        names = _race_names(season)
+        after_round = int(df["after_round"].iloc[0])
+        next_rounds = df.loc[df["kind"] == "race_win", "round"].dropna()
+        next_round = int(next_rounds.iloc[0]) if not next_rounds.empty else None
         out: dict = {
             "season": season,
             "as_of": str(df["as_of"].iloc[0]),
-            "after_round": int(df["after_round"].iloc[0]),
+            "after_round": after_round,
+            "after_race": names.get(after_round),
+            "next_round": next_round,
+            "next_race": names.get(next_round) if next_round is not None else None,
             "model_version": str(df["model_version"].iloc[0]),
             "n_sims": int(df["n_sims"].max()),
         }
@@ -226,9 +255,11 @@ def create_app() -> FastAPI:
             raise HTTPException(404, f"No {kind} forecasts stored for {season}")
         key = "driver" if kind != "constructors" else "team"
         latest = df[df["as_of"] == df["as_of"].max()].nlargest(top, "probability")[key].tolist()
+        names = _race_names(season)
         points = []
         for as_of, g in df.groupby("as_of", sort=True):
-            row = {"as_of": str(as_of), "after_round": int(g["after_round"].iloc[0])}
+            ar = int(g["after_round"].iloc[0])
+            row = {"as_of": str(as_of), "after_round": ar, "after_race": names.get(ar)}
             for name in latest:
                 m = g[g[key] == name]
                 row[name] = float(m["probability"].iloc[0]) if not m.empty else None

@@ -27,6 +27,8 @@ Answer questions about races using ONLY the tools provided. Rules:
   from a tool result. Never estimate, extrapolate or compute new numbers; quote the tool's values.
 - If the tools cannot answer, say what is missing instead of guessing.
 - Driver codes are 3 letters (VER, NOR, LEC ...). Use the current season (2025) if the question gives none.
+- Refer to races by their name ("the Chinese Grand Prix"), never by round number; list_sessions maps
+  round numbers to names if you need it.
 - For "what if" questions, translate the plain-English change into simulate_scenario changes, run it once,
   then report the changed driver's actual result vs the counterfactual probabilities.
 - Be concise: lead with the answer, then at most a few supporting facts."""
