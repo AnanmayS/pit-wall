@@ -8,6 +8,7 @@ import type {
   OddsHistory,
   OddsKind,
   OddsLatest,
+  OddsMarket,
   RaceStateMap,
   RecentScenario,
   ScenarioResult,
@@ -156,6 +157,7 @@ export const paths = {
   oddsLatest: (season: number) => `/api/odds/latest?${new URLSearchParams({ season: String(season) })}`,
   oddsHistory: (season: number, kind: OddsKind, top = 6) =>
     `/api/odds/history?${new URLSearchParams({ season: String(season), kind, top: String(top) })}`,
+  oddsMarket: (season: number) => `/api/odds/market?${new URLSearchParams({ season: String(season) })}`,
   whatif: (id: string) => `/api/whatif/${encodeURIComponent(id)}`,
   whatifRecent: (season: number, round: number) =>
     `/api/whatif/recent?${new URLSearchParams({ season: String(season), round: String(round) })}`,
@@ -259,4 +261,14 @@ export function getOddsLatest(season: number, signal?: AbortSignal) {
 
 export function getOddsHistory(season: number, kind: OddsKind, top = 6, signal?: AbortSignal) {
   return fetchJson<OddsHistory>(paths.oddsHistory(season, kind, top), { signal });
+}
+
+/** Our odds next to Polymarket's. Resolves to null when neither a forecast nor market data exists (404). */
+export async function getOddsMarket(season: number, signal?: AbortSignal): Promise<OddsMarket | null> {
+  try {
+    return await fetchJson<OddsMarket>(paths.oddsMarket(season), { signal });
+  } catch (err) {
+    if (err instanceof ApiError && err.isNotFound) return null;
+    throw err;
+  }
 }

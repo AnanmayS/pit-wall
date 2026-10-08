@@ -104,6 +104,8 @@ def market_comparison(season: int, client=None, top: int = 8) -> dict[str, Any]:
         parameters={"s": season},
     )
     ours_points = []
+    if ours_hist.empty:
+        ours_hist = pd.DataFrame(columns=["as_of", "after_round", "driver", "probability"])
     for as_of_ts, g in ours_hist.groupby("as_of", sort=True):
         ours_points.append(
             {

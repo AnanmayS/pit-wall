@@ -384,3 +384,62 @@ export interface OddsHistory {
   /** Ordered by as_of ascending. */
   points: OddsHistoryPoint[];
 }
+
+/** One driver in a "vs market" table; probabilities are 0..1 and null when that source lacks the driver. */
+export interface MarketComparisonRow {
+  driver: string;
+  /** Full name, e.g. "Kimi Antonelli". */
+  driver_name?: string | null;
+  /** Our model's probability. */
+  ours: number | null;
+  /** Market implied probability, normalised to sum to 1 across drivers. */
+  market: number | null;
+  /** Raw "Yes" price of the driver's market. */
+  market_raw: number | null;
+  /** ours - market. */
+  diff: number | null;
+}
+
+/** One day of normalised market title probabilities, keyed by driver code. */
+export interface MarketHistoryPoint {
+  /** "YYYY-MM-DD" (older builds append a time). */
+  date: string;
+  [driver: string]: number | string | null;
+}
+
+/** One of our stored forecasts, keyed by driver code. */
+export interface OursHistoryPoint {
+  date: string;
+  as_of: string;
+  after_round: number;
+  [driver: string]: number | string | null;
+}
+
+/** GET /api/odds/market?season= : our odds next to prediction-market odds. Rows sorted by max(ours, market) desc. */
+export interface OddsMarket {
+  season: number;
+  forecast_as_of: string | null;
+  /** e.g. "Polymarket". */
+  market_name: string;
+  title: {
+    market_as_of: string | null;
+    rows: MarketComparisonRow[];
+  };
+  next_race: {
+    round: number | null;
+    /** e.g. "Singapore Grand Prix". */
+    event_name?: string | null;
+    market_as_of: string | null;
+    rows: MarketComparisonRow[];
+  };
+  history: {
+    /** Driver codes of the top contenders. */
+    series: string[];
+    /** Driver code -> full name. */
+    series_names?: Record<string, string>;
+    /** Daily market title probability. */
+    market: MarketHistoryPoint[];
+    /** Our stored title forecasts; may be a single point. */
+    ours: OursHistoryPoint[];
+  };
+}

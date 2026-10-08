@@ -11,7 +11,7 @@ import { raceName } from "@/lib/races";
 import { useApi } from "@/lib/useApi";
 import { ConstructorsTable } from "./ConstructorsTable";
 import { KindToggle, ODDS_KINDS } from "./KindToggle";
-import { MarketComparison, type ProbabilityMap } from "./MarketComparison";
+import { MarketComparison } from "./MarketComparison";
 import { OddsHeader } from "./OddsHeader";
 import { OddsHistoryChart } from "./OddsHistoryChart";
 import { TitleOddsTable } from "./TitleOddsTable";
@@ -21,12 +21,6 @@ import { WhatHasToHappen } from "./WhatHasToHappen";
 const SEASONS = [2026, 2025];
 const DEFAULT_SEASON = 2026;
 const HISTORY_TOP = 6;
-
-function toMap(entries: { driver: string | null; probability: number }[] | undefined): ProbabilityMap {
-  const out: ProbabilityMap = {};
-  for (const e of entries ?? []) if (e.driver) out[e.driver] = e.probability;
-  return out;
-}
 
 export default function OddsClient() {
   const [season, setSeason] = useState(DEFAULT_SEASON);
@@ -158,10 +152,18 @@ export default function OddsClient() {
                 </Section>
               </div>
             </div>
-
-            {/* Market odds are not wired up yet; renders nothing while `market` is empty. */}
-            <MarketComparison ours={toMap(forecast.title)} market={{}} marketName="Polymarket" nameOf={nameOf} />
           </>
+        )}
+
+        {/* Shown under the forecast (or alone when only market data exists); hidden on 404. */}
+        {(forecast || noForecast) && (
+          <MarketComparison
+            season={season}
+            reload={reload}
+            nameOf={nameOf}
+            drivers={driverNames}
+            nextRace={nextRaceName}
+          />
         )}
       </div>
 
