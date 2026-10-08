@@ -251,3 +251,19 @@ CREATE TABLE IF NOT EXISTS forecasts (
 ) ENGINE = ReplacingMergeTree
 ORDER BY (season, kind, as_of, round, driver, team)
 SETTINGS allow_nullable_key = 1;
+
+-- Driver identity per season (names, number, latest team), filled from FastF1 results on every ingest.
+CREATE TABLE IF NOT EXISTS drivers (
+    season          UInt16,
+    round           UInt8,
+    session_type    LowCardinality(String),
+    driver          LowCardinality(String),       -- 3-letter code
+    driver_number   UInt8,
+    full_name       String,
+    first_name      String,
+    last_name       String,
+    team            LowCardinality(String),
+    country_code    LowCardinality(String),
+    ingested_at     DateTime DEFAULT now()
+) ENGINE = ReplacingMergeTree(ingested_at)
+ORDER BY (season, driver, round, session_type);

@@ -56,6 +56,12 @@ def list_sessions(season: int) -> list[dict]:
     return [s.model_dump() for s in queries.list_sessions(season)]
 
 
+def get_drivers(season: int) -> list[dict]:
+    return sorted(
+        queries.driver_names(season).values(), key=lambda d: str(d.get("last_name") or d["driver"])
+    )
+
+
 def compare_laps(season, round, session_type, driver_a, driver_b, lap_a=None, lap_b=None) -> dict:
     res = coach.compare_laps(
         season, round, session_type, driver_a, driver_b, lap_a=lap_a, lap_b=lap_b
@@ -177,6 +183,12 @@ CHANGE_SCHEMA = {
 }
 
 TOOLS: list[Tool] = [
+    Tool(
+        "get_drivers",
+        "Driver codes with full names, car numbers and teams for a season. Use it to turn codes into names.",
+        _schema({"season": _int("Season year, e.g. 2025")}),
+        get_drivers,
+    ),
     Tool(
         "list_sessions",
         "List ingested sessions (round numbers, event names, session types) for a season.",

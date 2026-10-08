@@ -304,3 +304,26 @@ def get_circuit_rotation(season: int, round: int, client: Client | None = None) 
         .result_rows
     )
     return float(rows[0][0]) if rows and rows[0][0] is not None else 0.0
+
+
+def driver_names(season: int, client: Client | None = None) -> dict[str, dict[str, Any]]:
+    """code -> {full_name, first_name, last_name, driver_number, team} for a season (latest session wins)."""
+    res = _client(client).query(
+        """
+        SELECT driver, argMax(full_name, (round, session_type)) AS full_name,
+               argMax(first_name, (round, session_type)) AS first_name,
+               argMax(last_name, (round, session_type)) AS last_name,
+               argMax(driver_number, (round, session_type)) AS driver_number,
+               argMax(team, (round, session_type)) AS team,
+               argMax(country_code, (round, session_type)) AS country_code
+        FROM drivers FINAL WHERE season={s:UInt16} GROUP BY driver
+        """,
+        parameters={"s": season},
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for row in res.result_rows:
+        d = dict(zip(res.column_names, row, strict=True))
+        if not d.get("full_name"):
+            d["full_name"] = d["driver"]
+        out[str(d["driver"])] = d
+    return out

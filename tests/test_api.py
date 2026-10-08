@@ -128,7 +128,7 @@ def test_compare_shape_defaults_to_fastest_laps(client: TestClient):
     assert body["corners"][0]["brake_delta_m"] == pytest.approx(8.0)
     insight = body["insights"][0]
     assert set(insight) == {"text", "corner", "delta_ms", "kind", "faster_driver"}
-    assert insight["text"].startswith("VER brakes 8 m later than NOR into T1")
+    assert insight["text"].startswith("Max Verstappen brakes 8 m later than Lando Norris into T1")
 
 
 def test_compare_accepts_fastest_and_explicit_laps(client: TestClient):

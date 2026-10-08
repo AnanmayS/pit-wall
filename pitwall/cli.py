@@ -110,3 +110,35 @@ def ingest_status_cmd(
 
 if __name__ == "__main__":
     app()
+
+
+@ingest_app.command("backfill-drivers")
+def backfill_drivers_cmd(season: int, verbose: bool = typer.Option(False, "-v")) -> None:
+    """Fill the drivers table for every ingested session of a season from the FastF1 cache."""
+    import logging
+
+    import pandas as pd
+
+    from pitwall.db.clickhouse import get_client
+    from pitwall.ingest.source import load_session
+    from pitwall.ingest.transform import drivers_frame
+
+    logging.getLogger("fastf1").setLevel(logging.ERROR)
+    client = get_client()
+    rows = client.query(
+        "SELECT round, session_type FROM sessions FINAL WHERE season={s:UInt16} ORDER BY round, session_type",
+        parameters={"s": season},
+    ).result_rows
+    total = 0
+    for rnd, st in rows:
+        try:
+            session = load_session(season, int(rnd), str(st), telemetry=False)
+            df = drivers_frame(session.results, season, int(rnd), str(st))
+        except Exception as e:  # noqa: BLE001 - keep going, report at the end
+            typer.echo(f"{season} R{rnd} {st}: skipped ({type(e).__name__}: {e})")
+            continue
+        if not df.empty:
+            client.insert_df("drivers", pd.DataFrame(df))
+            total += len(df)
+        typer.echo(f"{season} R{rnd} {st}: {len(df)} drivers")
+    typer.echo(f"backfilled {total} driver rows for {season}")

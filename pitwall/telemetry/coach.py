@@ -101,6 +101,7 @@ def compare_laps(
         step_m=step_m,
         normalize_length=normalize_length,
         rotation_deg=queries.get_circuit_rotation(season, round),
+        names=queries.driver_names(season),
     )
 
 
@@ -122,6 +123,7 @@ def build_comparison(
     step_m: float = 1.0,
     normalize_length: bool = True,
     rotation_deg: float = 0.0,
+    names: dict | None = None,
 ) -> CompareResult:
     """Pure part of compare_laps: telemetry frames + corner table in, CompareResult out.
 
@@ -156,10 +158,13 @@ def build_comparison(
     )
     segment_deltas, corner_rows = _compare_corners(segments, grid_a, grid_b, delta)
 
+    names = names or {}
+    name_a = str(names.get(driver_a, {}).get("full_name") or driver_a)
+    name_b = str(names.get(driver_b, {}).get("full_name") or driver_b)
     insights = [
         insight
         for row in corner_rows
-        if (insight := corner_insight(row, driver_a, driver_b)) is not None
+        if (insight := corner_insight(row, name_a, name_b)) is not None
     ]
     insights.sort(key=lambda i: (-abs(i.delta_ms), i.corner or ""))
 
@@ -170,6 +175,8 @@ def build_comparison(
         event_name=event_name,
         driver_a=driver_a,
         driver_b=driver_b,
+        driver_a_name=name_a,
+        driver_b_name=name_b,
         lap_a=lap_a,
         lap_b=lap_b,
         lap_time_a_ms=lap_time_a_ms,
@@ -183,12 +190,12 @@ def build_comparison(
         meta=meta,
         total_delta_ms=round_to(total_delta_ms, 1),
         telemetry_delta_ms=round_to(telemetry_delta_ms, 1),
-        summary=lap_summary(meta, total_delta_ms),
+        summary=lap_summary(meta, total_delta_ms, name_a, name_b),
         grid=_transport_grid(grid_a, grid_b, delta),
         segments=segment_deltas,
         corners=corner_rows,
         insights=insights,
-        key_segments=key_segments(segment_deltas, driver_a, driver_b),
+        key_segments=key_segments(segment_deltas, name_a, name_b),
         track=_track_map(grid_a, delta, corners, rotation_deg),
     )
 
@@ -419,10 +426,12 @@ def key_segments(
     return out
 
 
-def lap_summary(meta: CompareMeta, total_delta_ms: float) -> str:
-    """One-line headline, e.g. "VER (lap 18, 1:15.096) is 0.084 s faster than NOR (...)"."""
-    a = f"{meta.driver_a} (lap {meta.lap_a}{_lap_time_suffix(meta.lap_time_a_ms)})"
-    b = f"{meta.driver_b} (lap {meta.lap_b}{_lap_time_suffix(meta.lap_time_b_ms)})"
+def lap_summary(
+    meta: CompareMeta, total_delta_ms: float, name_a: str | None = None, name_b: str | None = None
+) -> str:
+    """One-line headline, e.g. "Max Verstappen (lap 18, 1:15.096) is 0.084 s faster than ..."."""
+    a = f"{name_a or meta.driver_a} (lap {meta.lap_a}{_lap_time_suffix(meta.lap_time_a_ms)})"
+    b = f"{name_b or meta.driver_b} (lap {meta.lap_b}{_lap_time_suffix(meta.lap_time_b_ms)})"
     if abs(total_delta_ms) < 0.5:
         return f"{a} and {b} are level on lap time"
     if total_delta_ms < 0:

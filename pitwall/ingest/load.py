@@ -32,6 +32,7 @@ INSERT_ORDER = (
     "track_status",
     "race_control",
     "results",
+    "drivers",
     "circuit_corners",
     "sessions",
 )

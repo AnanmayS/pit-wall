@@ -110,6 +110,12 @@ def create_app() -> FastAPI:
         clickhouse_ok = queries.ping()
         return {"status": "ok", "clickhouse": "up" if clickhouse_ok else "down"}
 
+    @app.get("/api/drivers")
+    def drivers_for_season(season: Annotated[int, Query(ge=1950, le=2100)]) -> list[dict]:
+        """Driver codes with full names, numbers and latest team for a season."""
+        names = queries.driver_names(season)
+        return sorted(names.values(), key=lambda d: str(d.get("last_name") or d["driver"]))
+
     @app.get("/api/sessions", response_model=list[SessionInfo])
     def sessions(season: Annotated[int, Query(ge=1950, le=2100)]) -> list[SessionInfo]:
         return queries.list_sessions(season)
@@ -123,6 +129,9 @@ def create_app() -> FastAPI:
         result = queries.list_drivers(season, round, st)
         if not result:
             raise HTTPException(404, f"No laps found for {season} round {round} {st}")
+        names = queries.driver_names(season)
+        for d in result:
+            d.full_name = str(names.get(d.driver, {}).get("full_name") or d.driver)
         return result
 
     @app.get(
@@ -161,11 +170,23 @@ def create_app() -> FastAPI:
         )
 
     # ---- What If (milestone 2) ----
+    def _with_driver_names(result: dict, season: int) -> dict:
+        names = queries.driver_names(season)
+
+        def nm(code: str) -> str:
+            return str(names.get(code, {}).get("full_name") or code)
+
+        for key in ("summary", "changed_drivers", "cars"):
+            for row in result.get(key) or []:
+                if isinstance(row, dict) and row.get("driver"):
+                    row["driver_name"] = nm(row["driver"])
+        return result
+
     @app.post("/api/whatif")
     def whatif_run(spec: ScenarioSpec) -> dict:
         """Run a scenario (or return the cached result) and return it with its share id."""
         try:
-            return run_or_cached(spec).to_dict()
+            return _with_driver_names(run_or_cached(spec).to_dict(), spec.season)
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
 
@@ -181,7 +202,7 @@ def create_app() -> FastAPI:
         state = race_state_map(season, round, lap)
         if state is None:
             raise HTTPException(404, f"No position telemetry for {season} round {round} lap {lap}")
-        return state.model_dump()
+        return _with_driver_names(state.model_dump(), season)
 
     @app.get("/api/whatif/recent")
     def whatif_recent(
@@ -194,7 +215,7 @@ def create_app() -> FastAPI:
         resp = open_shared(scenario_id)
         if resp is None:
             raise HTTPException(404, f"Unknown scenario {scenario_id}")
-        return resp.to_dict()
+        return _with_driver_names(resp.to_dict(), resp.spec.season if resp.spec else 0)
 
     # ---- Title Odds (milestone 3) ----
     @app.get("/api/odds/latest")
@@ -226,10 +247,14 @@ def create_app() -> FastAPI:
             "model_version": str(df["model_version"].iloc[0]),
             "n_sims": int(df["n_sims"].max()),
         }
+        names = queries.driver_names(season)
         for kind, g in df.groupby("kind"):
             out[kind] = [
                 {
                     "driver": r.driver or None,
+                    "driver_name": str(names.get(r.driver, {}).get("full_name") or r.driver)
+                    if r.driver
+                    else None,
                     "team": r.team or None,
                     "round": None if pd.isna(r.round) else int(r.round),
                     "probability": float(r.probability),
@@ -264,7 +289,17 @@ def create_app() -> FastAPI:
                 m = g[g[key] == name]
                 row[name] = float(m["probability"].iloc[0]) if not m.empty else None
             points.append(row)
-        return {"season": season, "kind": kind, "series": latest, "points": points}
+        names = queries.driver_names(season)
+        series_names = {
+            k: str(names.get(k, {}).get("full_name") or k) if key == "driver" else k for k in latest
+        }
+        return {
+            "season": season,
+            "kind": kind,
+            "series": latest,
+            "series_names": series_names,
+            "points": points,
+        }
 
     # ---- AI (milestone 2) ----
     class AskRequest(BaseModel):

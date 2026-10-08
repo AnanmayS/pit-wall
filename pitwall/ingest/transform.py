@@ -146,6 +146,16 @@ SCHEMAS: dict[str, dict[str, str]] = {
         "q2_ms": "UInt32",
         "q3_ms": "UInt32",
     },
+    "drivers": {
+        **_KEY,
+        "driver": "object",
+        "driver_number": "uint8",
+        "full_name": "object",
+        "first_name": "object",
+        "last_name": "object",
+        "team": "object",
+        "country_code": "object",
+    },
     "circuit_corners": {
         "season": "uint16",
         "round": "uint8",
@@ -558,6 +568,34 @@ def results_frame(
     return conform(_with_key(df, season, round, session_type), "results")
 
 
+def drivers_frame(
+    results: pd.DataFrame, season: int, round: int, session_type: str
+) -> pd.DataFrame:
+    """Driver identity rows (code, number, names, team) from a session's results."""
+    if results is None or len(results) == 0:
+        return empty_frame("drivers")
+    r = pd.DataFrame(results)
+    r = r[r["Abbreviation"].notna() & (r["Abbreviation"].astype(str) != "")]
+
+    def col(name: str) -> pd.Series:
+        return (
+            r[name].fillna("").astype(str) if name in r else pd.Series([""] * len(r), index=r.index)
+        )
+
+    df = pd.DataFrame(
+        {
+            "driver": r["Abbreviation"].values,
+            "driver_number": _numeric(r["DriverNumber"]).values,
+            "full_name": col("FullName").values,
+            "first_name": col("FirstName").values,
+            "last_name": col("LastName").values,
+            "team": col("TeamName").values,
+            "country_code": col("CountryCode").values,
+        }
+    )
+    return conform(_with_key(df, season, round, session_type), "drivers")
+
+
 def corners_frame(corners: pd.DataFrame | None, season: int, round: int) -> pd.DataFrame:
     if corners is None or len(corners) == 0:
         return empty_frame("circuit_corners")
@@ -678,6 +716,7 @@ def transform_session(
             session.race_control_messages, _t0_date(session, laps), season, round, session_type
         ),
         "results": results_frame(session.results, season, round, session_type),
+        "drivers": drivers_frame(session.results, season, round, session_type),
         "circuit_corners": corners_frame(corners, season, round),
     }
 

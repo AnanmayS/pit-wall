@@ -26,6 +26,7 @@ class DriverSummary(BaseModel):
     driver: str
     driver_number: int
     team: str
+    full_name: str = ""
     laps: int
     fastest_lap_number: int | None = None
     fastest_lap_ms: int | None = None
@@ -56,6 +57,8 @@ class CompareMeta(BaseModel):
     event_name: str
     driver_a: str
     driver_b: str
+    driver_a_name: str = ""
+    driver_b_name: str = ""
     lap_a: int
     lap_b: int
     lap_time_a_ms: int | None
